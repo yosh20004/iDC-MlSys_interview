@@ -1,3 +1,5 @@
+关于本文公式不能渲染的问题，可以安装[谷歌插件](https://chrome.google.com/webstore/detail/mathjax-plugin-for-github/ioemnmodlmafdkllaclgeombjnmnbima)，或者参考[这个仓库](https://github.com/wgs666/MathJax_Plugin_for_Github)
+
 # 题目  图神经网络计算的优化
 
 ## 1 背景
