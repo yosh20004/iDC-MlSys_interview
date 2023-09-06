@@ -38,9 +38,12 @@ $ReLU$函数定义为：$ReLU(x)=max(0,x)$;
 
 $LogSoftmax$函数定义为：
 $$
-LogSoftmax(X_{i,j}^{(l)})=(X_{i,j}^{(l)}-X_{i,max}^{(l)})-\log{\bigg({\displaystyle \sum^{F_l-1}_{c=0}e^{X^{(l)}_{i,c}-X^{l}_{(i,max)}}\bigg)}},
+LogSoftmax(X_{i,j}^{(l)})=(X_{i,j}^{(l)}-X_{i,max}^{(l)})-\log{\bigg({\displaystyle \sum^{F_l-1}_{c=0}e^{X^{(l)}_{i,c}-X^{l}_{(i,max)}}\bigg)}}
+$$
+$$
 X^{l}_{i,max}=max\big(X^{(l)}_{(i,0)},\ldots,X^{l}_{i,F_l-1}\big)
 $$
+
 综上所述，本文使用的唯一公式如下：
 $$
 Z=f(X,A)=LogSoftmax\bigg(\hat{A} \cdot ReLU\big(\hat{A}XW^{(0)}\big) \cdot W^{(1)}\bigg)
