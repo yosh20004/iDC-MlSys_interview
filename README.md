@@ -21,9 +21,7 @@
 <img src="./image/image-20230906164803017.png" alt="image-20230906164803017" style="zoom:50%;" />
 
 一层的GCN可以用以下公式来表述：
-$$
-X^{（l+1)} =\alpha（\hat{A}X^{(l)}W^{(l)}）
-$$
+$$X^{（l+1)} =\alpha（\hat{A}X^{(l)}W^{(l)}$$
 其中$l$表示模型层号，$\alpha$（$ReLU$、$SIGMOID$等）表示激活函数，$\hat{A}$为归一化的图邻接矩阵；$X^{(l)}$是输入的顶点特征矩阵（$X^{(0)}$为初始的节点特征）；$W^{(l)}$为神经网络的权重矩阵；$X^{(l+1)}$为输出的顶点特征矩阵。
 
 ## 2  题目介绍
@@ -34,15 +32,27 @@ $$
 
 本项目中的GCN由两个图卷积层构成，第一层的激活函数使用$ReLU$，第二层使用$LogSoftmax$；
 
-$ReLU$函数定义为：$ReLU(x)=max(0,x)$;
+$ReLU$ 函数定义为：$ReLU(x)=max(0,x)$
 
-$LogSoftmax$函数定义为：$LogSoftmax(X_{i,j}^{(l)})=(X_{i,j}^{(l)}-X_{i,max}^{(l)})-\log{\bigg({\displaystyle \sum^{F_l-1}_{c=0}e^{X^{(l)}_{i,c}-X^{l}_{(i,max)}}\bigg)}}$， 其中$X^{l}_{i,max}=max\big(X^{(l)}_{(i,0)},\ldots,X^{l}_{i,F_l-1}\big)$
+$LogSoftmax$ 函数定义为：
+
+
+$$LogSoftmax(X_{i,j}^{(l)})=(X_{i,j}^{(l)}-X_{i,max}^{(l)})-log\bigg(\displaystyle\sum_{c=0}^{F_l-1}e^{X_{i,c}^{(l)}-X_{(i,max)}^{(l)}}\bigg)$$
+
+
+其中 $X^{l}_{i,max}=max\big(X^{(l)}_{(i,0)},\cdots,X^{l}_{i,F_l-1}\big)$
 
 综上所述，本文使用的唯一公式如下：
-$$
-Z=f(X,A)=LogSoftmax\bigg(\hat{A} \cdot ReLU\big(\hat{A}XW^{(0)}\big) \cdot W^{(1)}\bigg)
-$$
+$$Z=f(X,A)=LogSoftmax\bigg(\hat{A} \cdot ReLU\big(\hat{A}XW^{(0)}\big) \cdot W^{(1)}\bigg)$$
 **文件介绍：**
+
+在本项目的数据集文件如下：`./graph/*.txt`；`./embedding/*.txt` 是每个图文件对应的特征（feature）矩阵；./weight/ *.bin为GCN的参数矩阵。
+
+-   图结构文件为文本文件，第一行两个整数分别为图顶点数量（$v\_num$）和边数量，之后每一行为一条边，格式为“源顶点id 目的顶点id”，顶点id从0开始
+-   图结构文件中包含自环（即有边“i i”），包含反向边（即同时有边“i j”和边“j i”）
+-   输入顶点特征矩阵文件为二进制文件，包含$v\_num \ast F_0$个float32，大小为$v\_num \ast F_0$*4字节
+-   第一层权重矩阵文件为二进制文件，包含$F0\ast F1$个float32，大小为$F0\ast F1 \ast 4$字节
+-   第二层权重矩阵文件为二进制文件，包含$F1\ast F2$个float32，大小为$F1\ast F2\ast 4$字节
 
 ./example/gcn.cpp 是一个示例代码，其中包括读文件、预处理、计算、输出结果等。**其中readGraph()函数不可修改**
 
@@ -62,14 +72,6 @@ $$
 -   如果使用第三方库需要提供具体说明
 
 本项目是可以直接运行的，同学们拿到代码之后可以运行基础代码得到相应的结果，优化代码要求结果准确。
-
-在本项目的数据集文件如下：./graph/*.txt；./embedding/ *.txt是每个图文件对应的特征（feature）矩阵；./weight/ *.bin为GCN的参数矩阵。
-
--   图结构文件为文本文件，第一行两个整数分别为图顶点数量（$v\_num$）和边数量，之后每一行为一条边，格式为“源顶点id 目的顶点id”，顶点id从0开始
--   图结构文件中包含自环（即有边“i i”），包含反向边（即同时有边“i j”和边“j i”）
--   输入顶点特征矩阵文件为二进制文件，包含$v\_num \ast F_0$个float32，大小为$v\_num \ast F_0$*4字节
--   第一层权重矩阵文件为二进制文件，包含$F0\ast F1$个float32，大小为$F0\ast F1 \ast 4$字节
--   第二层权重矩阵文件为二进制文件，包含$F1\ast F2$个float32，大小为$F1\ast F2\ast 4$字节
 
 ## 3 优化目标
 
@@ -106,7 +108,6 @@ $ReLU$函数、$LogSoftmax$函数可以使用向量化等手段优化。 还会�
 
 程序源代码。
 技术报告文档，包括但不限于算法介绍、设计思路及方法、实验分析，还有从项目中学到了什么。
-
 
 
 
