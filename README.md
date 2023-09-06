@@ -30,9 +30,9 @@ $$X^{（l+1)} =\alpha（\hat{A}X^{(l)}W^{(l)}$$
 
 **公式：**
 
-本项目中的GCN由两个图卷积层构成，第一层的激活函数使用$ReLU$，第二层使用$LogSoftmax$；
+本项目中的GCN由两个图卷积层构成，第一层的激活函数使用 $ReLU$ ，第二层使用 $LogSoftmax$ ；
 
-$ReLU$ 函数定义为：$ReLU(x)=max(0,x)$
+$ReLU$ 函数定义为： $ReLU(x)=max(0,x)$ 
 
 $LogSoftmax$ 函数定义为：
 
