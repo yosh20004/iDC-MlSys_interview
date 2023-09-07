@@ -32,7 +32,7 @@ $$X^{（l+1)} =\alpha(\hat{A}X^{(l)}W^{(l)})$$
 
 本项目中的GCN由两个图卷积层构成，第一层的激活函数使用 $ReLU$ ，第二层使用 $LogSoftmax$ ；
 
-$ReLU$ 函数定义为： $ReLU(x)=max(0,x)$ 
+$ReLU$ 函数定义为： $ReLU(x)=max(0,x)$ ;
 
 $LogSoftmax$ 函数定义为：
 
@@ -61,9 +61,9 @@ $$Z=f(X,A)=LogSoftmax\bigg(\hat{A} \cdot ReLU\big(\hat{A}XW^{(0)}\big) \cdot W^{
 -   读取文件、分配内存、和数组初始化置0的时间均不统计在执行时间内
 -   预处理时间（例如顶点排序）等须计入执行时间
 
-`./example/makefile` 是make文件，可以修改，也可以使用cmake工具编译代码
+`./example/makefile` 是make文件，可以修改，也可以使用cmake工具编译代码。
 
-`./run.sh` 是运行代码的例子
+`./run.sh` 是运行代码的例子。
 
 -   可执行程序需接收7个参数，分别为：输入顶点特征长度 $F_0$ ，第一层顶点特征长度 $F_1$ ，第二次顶点特征长度 $F_2$ ，图结构文件名，输入顶点特征矩阵文件名，   
 
