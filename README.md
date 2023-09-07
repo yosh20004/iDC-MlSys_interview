@@ -32,7 +32,7 @@ $$X^{（l+1)} =\alpha（\hat{A}X^{(l)}W^{(l)}$$
 
 本项目中的GCN由两个图卷积层构成，第一层的激活函数使用 $ReLU$ ，第二层使用 $LogSoftmax$ ；
 
-$ReLU$ 函数定义为： $ReLU(x)=max(0,x)$ 
+$ReLU$ 函数定义为： $ReLU(x)=max(0,x)$ ；
 
 $LogSoftmax$ 函数定义为：
 
@@ -40,7 +40,7 @@ $LogSoftmax$ 函数定义为：
 $$LogSoftmax(X_{i,j}^{(l)})=(X_{i,j}^{(l)}-X_{i,max}^{(l)})-log\bigg(\displaystyle\sum_{c=0}^{F_l-1}e^{X_{i,c}^{(l)}-X_{(i,max)}^{(l)}}\bigg)$$
 
 
-其中 $X^{l}_{i,max}=max\big(X^{(l)}_{(i,0)},\cdots,X^{l}_{i,F_l-1}\big)$
+其中 $X_{i,max}^{l}=max\big(X_{(i,0)}^{(l)},\cdots,X_{i,F_l-1}^{l}\big)$
 
 综上所述，本文使用的唯一公式如下：
 $$Z=f(X,A)=LogSoftmax\bigg(\hat{A} \cdot ReLU\big(\hat{A}XW^{(0)}\big) \cdot W^{(1)}\bigg)$$
