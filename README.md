@@ -67,7 +67,7 @@ $$Z=f(X,A)=LogSoftmax\bigg(\hat{A} \cdot ReLU\big(\hat{A}XW^{(0)}\big) \cdot W^{
 
 -   图结构文件为文本文件，第一行两个整数分别为图顶点数量（ $v\\_num$ ）和边数量，之后每一行为一条边，格式为“源顶点id 目的顶点id”，顶点id从0开始
 -   图结构文件中包含自环（即有边“i i”），包含反向边（即同时有边“i j”和边“j i”）
--   输入顶点特征矩阵文件为二进制文件，包含 $v\\_num \ast F_0$ 个float32，大小为 $v\\_num \ast F_0$ *4字节
+-   输入顶点特征矩阵文件为二进制文件，包含 $v\\_num \ast F_0$ 个float32，大小为 $v\\_num \ast F_0 \ast 4$ 字节
 -   第一层权重矩阵文件为二进制文件，包含 $F0\ast F1$ 个float32，大小为 $F0\ast F1 \ast 4$ 字节
 -   第二层权重矩阵文件为二进制文件，包含 $F1\ast F2$ 个float32，大小为 $F1\ast F2\ast 4$ 字节
 
