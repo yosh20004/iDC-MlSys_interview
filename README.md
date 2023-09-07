@@ -28,7 +28,7 @@ $$X^{（l+1)} =\alpha(\hat{A}X^{(l)}W^{(l)})$$
 
 对给定数据集，在不损失计算精度（计算的中间过程及其最后结果应全部采用32位浮点数精度）的情况下，以尽可能短的时间完成GCN推理的计算。
 
-**公式：**
+### 2.1 公式：
 
 本项目中的GCN由两个图卷积层构成，第一层的激活函数使用 $ReLU$ ，第二层使用 $LogSoftmax$ ；
 
@@ -46,7 +46,7 @@ $$X_{i,max}^{l}=max\big(X_{(i,0)}^{(l)},\cdots,X_{i,F_l-1}^{l}\big)$$
 
 $$Z=f(X,A)=LogSoftmax\bigg(\hat{A} \cdot ReLU\big(\hat{A}XW^{(0)}\big) \cdot W^{(1)}\bigg)$$
 
-**文件介绍：**
+### 2.2 文件介绍：
 
 在本项目的数据集文件如下：`./graph/*.txt`；`./embedding/*.txt` 是每个图文件对应的特征（feature）矩阵；`./weight/*.bin`为GCN的参数矩阵。
 
