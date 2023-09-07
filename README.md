@@ -19,7 +19,7 @@
 <img src="./image/image-20230906164803017.png" alt="image-20230906164803017" style="zoom:50%;" />
 
 一层的GCN可以用以下公式来表述：
-$$X^{（l+1)} =\alpha(\hat{A}X^{(l)}W^{(l)})$$
+$$X^{（l+1)} =\alpha(\hat{A}X^{(l)}W^{(l)})；$$
 其中 $l$ 表示模型层号， $\alpha$ （ $ReLU$ 、 $Sigmoid$ 等）表示激活函数， $\hat{A}$ 为归一化的图邻接矩阵； $X^{(l)}$ 是输入的顶点特征矩阵（ $X^{(0)}$ 为初始的节点特征）； $W^{(l)}$ 为神经网络的权重矩阵； $X^{(l+1)}$ 为输出的顶点特征矩阵。
 
 ## 2  题目介绍
@@ -38,11 +38,11 @@ $LogSoftmax$ 函数定义为：
 $$LogSoftmax(X_{i,j}^{(l)})=(X_{i,j}^{(l)}-X_{i,max}^{(l)})-log\bigg(\displaystyle\sum_{c=0}^{F_l-1}e^{X_{i,c}^{(l)}-X_{(i,max)}^{(l)}}\bigg), $$
 
 
-$$X_{i,max}^{l}=max\big(X_{(i,0)}^{(l)},\cdots,X_{i,F_l-1}^{l}\big)$$
+$$X_{i,max}^{l}=max\big(X_{(i,0)}^{(l)},\cdots,X_{i,F_l-1}^{l}\big)；$$
 
 综上所述，本文使用的唯一公式如下：
 
-$$Z=f(X,A)=LogSoftmax\bigg(\hat{A} \cdot ReLU\big(\hat{A}XW^{(0)}\big) \cdot W^{(1)}\bigg)$$
+$$Z=f(X,A)=LogSoftmax\bigg(\hat{A} \cdot ReLU\big(\hat{A}XW^{(0)}\big) \cdot W^{(1)}\bigg)；$$
 
 ### 2.2 文件介绍：
 
@@ -54,12 +54,12 @@ $$Z=f(X,A)=LogSoftmax\bigg(\hat{A} \cdot ReLU\big(\hat{A}XW^{(0)}\big) \cdot W^{
 -   第一层权重矩阵文件为二进制文件，包含 $F0\ast F1$ 个float32，大小为 $F0\ast F1 \ast 4$ 字节
 -   第二层权重矩阵文件为二进制文件，包含 $F1\ast F2$ 个float32，大小为 $F1\ast F2\ast 4$ 字节
 
-`./example/gcn.cpp` 是一个示例代码，其中包括读文件、预处理、计算、输出结果等。**其中readGraph()函数不可修改**
+`./example/gcn.cpp` 是一个示例代码，其中包括读文件、预处理、计算、输出结果等。**其中`readGraph()`函数不可修改**
 
 -   读取文件、分配内存、和数组初始化置0的时间均不统计在执行时间内
 -   预处理时间（例如顶点排序）等须计入执行时间
 
-`./example/makefile` 是make文件，可以修改，也可以使用cmake工具编译代码。
+`./example/makefile` 是`make`文件，可以修改，也可以使用`cmake`工具编译代码。
 
 `./run.sh` 是运行代码的例子。
 
@@ -75,11 +75,11 @@ $$Z=f(X,A)=LogSoftmax\bigg(\hat{A} \cdot ReLU\big(\hat{A}XW^{(0)}\big) \cdot W^{
 
 ## 3 优化目标
 
-### 3.1 基础优化 1：优化稠密矩阵相乘（改进XW()）
+### 3.1 基础优化 1：优化稠密矩阵相乘（改进`XW()`）
 
- $X$ 和 $W$ 是两个稠密的矩阵。稠密矩阵的乘法操作的优化方法包括但不限于向量化加速、多线程处理（OpenMP）、计算模式等等。
+ $X$ 和 $W$ 是两个稠密的矩阵。稠密矩阵的乘法操作的优化方法包括但不限于向量化加速、多线程处理（`OpenMP`）、计算模式等等。
 
-### 3.2 基础优化 2：优化稀疏矩阵相乘（改进AX()）
+### 3.2 基础优化 2：优化稀疏矩阵相乘（改进`AX()`）
 
 首先， $A$ 是一个稀疏矩阵，因为 $A$ 中大部分元素都是0。稀疏矩阵乘法乘法操作的优化方法包括但不限于向量化加速、多线程处理、矩阵压缩等等。
 
