@@ -1,2 +1,2 @@
-g++ -o ../your_name.exe  gcn.cpp
+g++ -o ../example.exe  gcn.cpp
 
