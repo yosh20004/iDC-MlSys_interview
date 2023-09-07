@@ -65,7 +65,7 @@ $$Z=f(X,A)=LogSoftmax\bigg(\hat{A} \cdot ReLU\big(\hat{A}XW^{(0)}\big) \cdot W^{
 
 本项目是可以直接运行的，同学们拿到代码之后可以运行基础代码得到相应的结果，优化代码要求结果准确。
 
-在本项目的数据集文件如下：`./graph/*.txt`；`./embedding/*.txt` 是每个图文件对应的特征（feature）矩阵；`./weight/*.bin`为GCN的参数矩阵。
+在本项目的数据集文件如下：`./graph/*.txt`；`./embedding/*.bin` 是每个图文件对应的特征（feature）矩阵；`./weight/*.bin`为GCN的参数矩阵。
 
 -   图结构文件为文本文件，第一行两个整数分别为图顶点数量（ $v\\_num$ ）和边数量，之后每一行为一条边，格式为“源顶点id 目的顶点id”，顶点id从0开始
 -   图结构文件中包含自环（即有边“i i”），包含反向边（即同时有边“i j”和边“j i”）
