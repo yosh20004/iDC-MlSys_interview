@@ -1,3 +1,4 @@
+#include <memory>
 #include <stdio.h>
 #include <vector>
 #include <fstream>
@@ -92,9 +93,9 @@ void initFloat(float *&dst, int num)
 
 void XW(int in_dim, int out_dim, float *in_X, float *out_X, float *W)
 {
-	float(*tmp_in_X)[in_dim] = (float(*)[in_dim])in_X;
-	float(*tmp_out_X)[out_dim] = (float(*)[out_dim])out_X;
-	float(*tmp_W)[out_dim] = (float(*)[out_dim])W;
+	auto tmp_in_X  = reinterpret_cast<float (*)[in_dim]>(in_X);
+	auto tmp_out_X = reinterpret_cast<float (*)[out_dim]>(out_X);
+	auto tmp_W     = reinterpret_cast<float (*)[out_dim]>(W);
 
 	for (int i = 0; i < v_num; i++)
 	{
@@ -110,8 +111,9 @@ void XW(int in_dim, int out_dim, float *in_X, float *out_X, float *W)
 
 void AX(int dim, float *in_X, float *out_X)
 {
-	float(*tmp_in_X)[dim] = (float(*)[dim])in_X;
-	float(*tmp_out_X)[dim] = (float(*)[dim])out_X;
+	// float(*tmp_in_X)[dim] = (float(*)[dim])in_X;
+	auto tmp_in_X = reinterpret_cast<float (*)[dim]>(in_X);
+	auto tmp_out_X = reinterpret_cast<float (*)[dim]>(out_X);
 
 	for (int i = 0; i < v_num; i++)
 	{
@@ -136,7 +138,7 @@ void ReLU(int dim, float *X)
 
 void LogSoftmax(int dim, float *X)
 {
-	float(*tmp_X)[dim] = (float(*)[dim])X;
+	auto tmp_X = reinterpret_cast<float (*)[dim]>(X);
 
 	for (int i = 0; i < v_num; i++)
 	{
@@ -163,7 +165,7 @@ void LogSoftmax(int dim, float *X)
 
 float MaxRowSum(float *X, int dim)
 {
-	float(*tmp_X)[dim] = (float(*)[dim])X;
+	auto tmp_X = reinterpret_cast<float (*)[dim]>(X);
 	float max = -__FLT_MAX__;
 
 	for (int i = 0; i < v_num; i++)
