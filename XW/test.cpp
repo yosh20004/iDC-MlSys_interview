@@ -5,7 +5,6 @@
 #include <cstring>
 #include <utility>
 #include <memory>
-#include <immintrin.h>
 
 #ifdef USE_BLAS
 #include <cblas.h>
@@ -18,10 +17,11 @@ constexpr int TIMES = 300;
 
 using f32 = float;
 
-template<typename T>
+template<typename T, bool random = false>
 T* alloc(int n) {
     T *p = (float *)aligned_alloc(64, n * sizeof(T));
-    for (int i = 0; i < n; ++i) p[i] = (T)(rand()) / RAND_MAX;
+    if constexpr (random)
+        for (int i = 0; i < n; ++i) p[i] = (T)(rand()) / RAND_MAX;
     return p;
 }
 struct AlignedDeleter {
@@ -31,22 +31,21 @@ struct AlignedDeleter {
 };
 
 
-[[gnu::always_inline]] void gemm_kernel_4x4_Btransposed(const float* __restrict__ A_L1_local,
-                     const float* __restrict__ B_L1_local, //B需要被转置
+template<uint stride = 4>
+[[gnu::always_inline]] void gemm_kernel_micro(const float* __restrict__ A_L1_local,
+                     const float* __restrict__ B_L1_local,
                      float* __restrict__ C_block, 
                      int ldc)
 {
     // 4x4 子块乘法：A(4,4) * B(4,4) → C(4,4)
-    constexpr int stride = 4;
-    for (int i = 0; i < stride; ++i) {
-        for (int j = 0; j < stride; ++j) {
+    for (uint32_t i = 0; i < stride; ++i)
+        for (uint32_t j = 0; j < stride; ++j) {
             float sum = 0.f;
-            for (int k = 0; k < stride; ++k) 
+            for (uint32_t k = 0; k < stride; ++k) 
                 sum += A_L1_local[i * stride + k] * 
                        B_L1_local[j * stride + k];
             C_block[i * ldc + j] += sum;
         }
-    }
 }
 
 
@@ -83,7 +82,7 @@ void gemm_kernel(const float* __restrict__ A_pack,
                 }
 
                 // 4*4 子块乘法
-                gemm_kernel_4x4_Btransposed(
+                gemm_kernel_micro<stride>(
                                 A_L1_local.get(), 
                                 B_L1_local.get(), 
                                 C_block + i * N + j, ldc);
@@ -150,11 +149,11 @@ void gemm_blas(const float *A, const float *B, float *C) {
 
 int main() {
     srand(1234);                // 固定随机种子
-    float *A = alloc<f32>(M * K);
-    float *B = alloc<f32>(K * N);
-    float *C1 = alloc<f32>(M * N);
-    float *C2 = alloc<f32>(M * N);
-    float *C3 = alloc<f32>(M * N);
+    float *A = alloc<f32, true>(M * K);
+    float *B = alloc<f32, true>(K * N);
+    float *C1 = alloc<f32, true>(M * N);
+    float *C2 = alloc<f32, true>(M * N);
+    float *C3 = alloc<f32, true>(M * N);
 
     {
         // 预热
