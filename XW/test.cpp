@@ -1,11 +1,9 @@
-// test_xw_minimal.cpp
 #include <cstdio>
 #include <cstdlib>
 #include <chrono>
 #include <cstring>
-#include <utility>
-#include <memory>
 #include <immintrin.h>
+#include <stdexcept>
 
 #ifdef USE_BLAS
 #include <cblas.h>
@@ -14,24 +12,20 @@
 constexpr int M = 1024;   // 行
 constexpr int K = 64;     // 内
 constexpr int N = 1024;     // 列
-constexpr int TIMES = 300;
+constexpr int TIMES = 100;
 
 using f32 = float;
 
-template<typename T>
+template<typename T, bool random = false>
 T* alloc(int n) {
     T *p = (float *)aligned_alloc(64, n * sizeof(T));
-    for (int i = 0; i < n; ++i) p[i] = (T)(rand()) / RAND_MAX;
+    if constexpr (random)
+        for (int i = 0; i < n; ++i) p[i] = (T)(rand()) / RAND_MAX;
     return p;
 }
-struct AlignedDeleter {
-    void operator()(void* p) const {
-        free(p);  // aligned_alloc 使用 free 释放
-    }
-};
 
-
-[[gnu::always_inline]] void gemm_kernel_4x4_Btransposed(const float* __restrict__ A_L1_local,
+[[gnu::always_inline]] void gemm_kernel_4x4_Btransposed(
+                     const float* __restrict__ A_L1_local,
                      const float* __restrict__ B_L1_local, //B需要被转置
                      float* __restrict__ C_block, 
                      int ldc)
@@ -59,8 +53,8 @@ void gemm_kernel(const float* __restrict__ A_pack,
                  int kc_real) {
                     
     constexpr int stride = 4; // 步长
-    auto A_L1_local = std::unique_ptr<f32[], AlignedDeleter>(alloc<f32>(stride * stride));
-    auto B_L1_local = std::unique_ptr<f32[], AlignedDeleter>(alloc<f32>(stride * stride));
+    f32 A_L1_local[stride * stride] = {};
+    f32 B_L1_local[stride * stride] = {};
 
     // 朴素子块乘法：A(mc,kc) * B(kc,nc) → C(mc,nc)
     for (int i = 0; i < mc_real; i += stride)
@@ -84,9 +78,9 @@ void gemm_kernel(const float* __restrict__ A_pack,
 
                 // 4*4 子块乘法
                 gemm_kernel_4x4_Btransposed(
-                                A_L1_local.get(), 
-                                B_L1_local.get(), 
-                                C_block + i * N + j, ldc);
+                                A_L1_local, 
+                                B_L1_local, 
+                        C_block + i * N + j, ldc);
             }
 }
 
@@ -125,18 +119,6 @@ void gemm_test(const float *A, const float *B, float *C) {
     }
 }
 
-// native
-void gemm_native(const float *A, const float *B, float *C) {
-    for (int i = 0; i < M; ++i) {
-        for (int j = 0; j < N; ++j) {
-            float sum = 0.f;
-            for (int k = 0; k < K; ++k) {
-                sum += A[i * K + k] * B[k * N + j];
-            }
-            C[i * N + j] += sum;
-        }
-    }
-}
 
 // OpenBLAS
 void gemm_blas(const float *A, const float *B, float *C) {
@@ -144,17 +126,17 @@ void gemm_blas(const float *A, const float *B, float *C) {
     cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
                 M, N, K, 1.0f, A, K, B, N, 0.0f, C, N);
 #else
-    gemm_native(A, B, C);
+    throw std::runtime_error("OpenBLAS is not enabled.");
 #endif
 }
 
 int main() {
     srand(1234);                // 固定随机种子
-    float *A = alloc<f32>(M * K);
-    float *B = alloc<f32>(K * N);
-    float *C1 = alloc<f32>(M * N);
-    float *C2 = alloc<f32>(M * N);
-    float *C3 = alloc<f32>(M * N);
+    float *A = alloc<f32, true>(M * K);
+    float *B = alloc<f32, true>(K * N);
+    float *C1 = alloc<f32, true>(M * N);
+    float *C2 = alloc<f32, true>(M * N);
+    float *C3 = alloc<f32, true>(M * N);
 
     {
         // 预热
@@ -171,15 +153,15 @@ int main() {
     }
     auto t2 = std::chrono::high_resolution_clock::now();
     for (int i=0; i < TIMES; ++i) {
-        std::memset(C2, 0, M * N * sizeof(float));
         gemm_test(A, B, C2);     // test
     }
     auto t3 = std::chrono::high_resolution_clock::now();
-    // for (int i=0; i < TIMES; ++i) {
-    //     std::memset(C3, 0, M * N * sizeof(float));
-    //     //gemm_native(A, B, C3);     // native
-    // }
-    // auto t4 = std::chrono::high_resolution_clock::now();
+
+    {
+        // 比较计算结果
+        std::memset(C2, 0, M * N * sizeof(float));
+        gemm_test(A, B, C2);     // test
+    }
 
     double err = 0;
     for (int i = 0; i < M * N; ++i)
