@@ -24,63 +24,69 @@ T* alloc(int n) {
     return p;
 }
 
-[[gnu::always_inline]] void gemm_kernel_4x4_Btransposed(
+template<uint strideX, uint strideY, uint strideZ>
+inline void gemm_kernel_Btransposed(
                      const float* __restrict__ A_L1_local,
                      const float* __restrict__ B_L1_local, //B需要被转置
                      float* __restrict__ C_block, 
                      int ldc)
 {
-    // 4x4 子块乘法：A(4,4) * B(4,4) → C(4,4)
-    constexpr int stride = 4;
-    for (int i = 0; i < stride; ++i) {
-        for (int j = 0; j < stride; ++j) {
+    // 子块乘法：A(X,Y) * B(Z,Y) → C(X,Z)
+    for (uint i = 0; i < strideX; ++i) {
+        for (uint j = 0; j < strideZ; ++j) {
             float sum = 0.f;
-            for (int k = 0; k < stride; ++k) 
-                sum += A_L1_local[i * stride + k] * 
-                       B_L1_local[j * stride + k];
+            for (uint k = 0; k < strideY; ++k) 
+                sum += A_L1_local[i * strideY + k] * 
+                       B_L1_local[j * strideY + k];
             C_block[i * ldc + j] += sum;
         }
     }
 }
 
-
 void gemm_kernel(const float* __restrict__ A_pack,
                  const float* __restrict__ B_pack,
                  float* __restrict__ C_block, 
                  int ldc,       
-                 int mc_real, 
-                 int nc_real, 
-                 int kc_real) {
+                 uint mc_real, 
+                 uint nc_real, 
+                 uint kc_real) {
                     
-    constexpr int stride = 4; // 步长
-    f32 A_L1_local[stride * stride] = {};
-    f32 B_L1_local[stride * stride] = {};
+    constexpr int strideX = 8;
+    constexpr int strideY = 8; 
+    constexpr int strideZ = 4; 
+    f32 A_L1_local[strideX * strideY] = {}; // ASize = X * Y
+    f32 B_L1_local[strideZ * strideY] = {}; // BSize = Z * Y
 
-    // 朴素子块乘法：A(mc,kc) * B(kc,nc) → C(mc,nc)
-    for (int i = 0; i < mc_real; i += stride)
-        for (int j = 0; j < nc_real; j += stride)
-            for (int k = 0; k < kc_real; k += stride) {
-                // load A_L1_local
-                for (int ii = 0; ii < stride; ++ii) {
-                    for (int jj = 0; jj < stride; ++jj) {
-                        A_L1_local[ii * stride + jj] = 
+    // 子块乘法：A(mc,kc) * B(kc,nc) → C(mc,nc)
+    for (uint i = 0; i < mc_real; i += strideX)
+        for (uint j = 0; j < nc_real; j += strideZ)
+            for (uint k = 0; k < kc_real; k += strideY) {
+
+                // load A_L1_local (Alocal左上角的坐标为(i, k))
+                // A_pack(X, Y) → Alocal(X, Y)
+                // A_pack[i + ii][k + jj] → Alocal[ii][jj]
+                for (uint ii = 0; ii < strideX; ++ii) {
+                    for (uint jj = 0; jj < strideY; ++jj) {
+                        A_L1_local[ii * strideY + jj] = 
                             A_pack[(i + ii) * kc_real + k + jj];
                     }
                 }
 
-                // load B_L1_local
-                for (int ii = 0; ii < stride; ++ii) {
-                    for (int jj = 0; jj < stride; ++jj) {
-                        B_L1_local[jj * stride + ii] = 
+                // load B_L1_local (Blocal左上角的坐标为(k, j))
+                // B_pack(Y, Z) → Blocal(Z, Y)
+                // B_pack[k + ii][j + jj] → Blocal[jj][ii]
+                for (uint ii = 0; ii < strideY; ++ii) {
+                    for (uint jj = 0; jj < strideZ; ++jj) {
+                        B_L1_local[jj * strideY + ii] = 
                             B_pack[(k + ii) * nc_real + j + jj];
                     }
                 }
 
                 // 4*4 子块乘法
-                gemm_kernel_4x4_Btransposed(
+                gemm_kernel_Btransposed<strideX, strideY, strideZ>(
                                 A_L1_local, 
                                 B_L1_local, 
-                        C_block + i * N + j, ldc);
+                       C_block + i * N + j, ldc);
             }
 }
 
