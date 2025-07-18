@@ -5,6 +5,7 @@
 #include <cstring>
 #include <utility>
 #include <memory>
+#include <immintrin.h>
 
 #ifdef USE_BLAS
 #include <cblas.h>
@@ -30,21 +31,22 @@ struct AlignedDeleter {
 };
 
 
-[[gnu::always_inline]] void gemm_kernel_4x4(const float* __restrict__ A_L1_local,
-                     const float* __restrict__ B_L1_local,
+[[gnu::always_inline]] void gemm_kernel_4x4_Btransposed(const float* __restrict__ A_L1_local,
+                     const float* __restrict__ B_L1_local, //B需要被转置
                      float* __restrict__ C_block, 
                      int ldc)
 {
     // 4x4 子块乘法：A(4,4) * B(4,4) → C(4,4)
     constexpr int stride = 4;
-    for (int i = 0; i < stride; ++i)
+    for (int i = 0; i < stride; ++i) {
         for (int j = 0; j < stride; ++j) {
             float sum = 0.f;
             for (int k = 0; k < stride; ++k) 
                 sum += A_L1_local[i * stride + k] * 
-                       B_L1_local[k * stride + j];
+                       B_L1_local[j * stride + k];
             C_block[i * ldc + j] += sum;
         }
+    }
 }
 
 
@@ -75,13 +77,13 @@ void gemm_kernel(const float* __restrict__ A_pack,
                 // load B_L1_local
                 for (int ii = 0; ii < stride; ++ii) {
                     for (int jj = 0; jj < stride; ++jj) {
-                        B_L1_local[ii * stride + jj] = 
+                        B_L1_local[jj * stride + ii] = 
                             B_pack[(k + ii) * nc_real + j + jj];
                     }
                 }
 
                 // 4*4 子块乘法
-                gemm_kernel_4x4(
+                gemm_kernel_4x4_Btransposed(
                                 A_L1_local.get(), 
                                 B_L1_local.get(), 
                                 C_block + i * N + j, ldc);
