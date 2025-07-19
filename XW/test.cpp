@@ -69,10 +69,22 @@ void gemm_kernel(const float* __restrict__ A_pack,
                 // A_pack(X, Y) → Alocal(X, Y)
                 // A_pack[i + ii][k + jj] → Alocal[ii][jj]
                 for (uint ii = 0; ii < strideX; ++ii) {
-                    for (uint jj = 0; jj < strideY; ++jj) {
-                        A_L1_local[ii * strideY + jj] = 
-                            A_pack[(i + ii) * kc_real + k + jj];
-                    }
+                    // v1
+                    // for (uint jj = 0; jj < strideY; ++jj) {
+                    //     A_L1_local[ii * strideY + jj] = 
+                    //         A_pack[(i + ii) * kc_real + k + jj];
+                    // }
+
+                    // v2
+                    std::memmove(A_L1_local + ii * strideY, 
+                                  A_pack + (i + ii) * kc_real + k, 
+                                  strideY * sizeof(f32));
+
+                    // v3
+                    // asm volatile("# ---- begin copy ----" ::: "memory");
+                    // __m256 A_L1_local_line = _mm256_loadu_ps(A_pack + (i + ii) * kc_real + k);
+                    // _mm256_storeu_ps(A_L1_local + ii * strideY, A_L1_local_line);
+                    // asm volatile("# ---- begin copy ----" ::: "memory");
                 }
 
                 // load B_L1_local (Blocal左上角的坐标为(k, j))
