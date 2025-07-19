@@ -57,6 +57,7 @@ void gemm_kernel(const float* __restrict__ A_pack,
     f32 A_L1_local[strideX * strideY] = {}; // ASize = X * Y
     f32 B_L1_local[strideZ * strideY] = {}; // BSize = Z * Y
     f32 C_L1_local[strideX * strideZ] = {}; // CSize = X * Z
+    static_assert(strideX % 4 == 0 && strideY % 8 == 0 && strideZ % 4 == 0);
 
     // 子块乘法：A(mc,kc) * B(kc,nc) → C(mc,nc)
     for (uint i = 0; i < mc_real; i += strideX)
@@ -69,22 +70,10 @@ void gemm_kernel(const float* __restrict__ A_pack,
                 // A_pack(X, Y) → Alocal(X, Y)
                 // A_pack[i + ii][k + jj] → Alocal[ii][jj]
                 for (uint ii = 0; ii < strideX; ++ii) {
-                    // v1
-                    // for (uint jj = 0; jj < strideY; ++jj) {
-                    //     A_L1_local[ii * strideY + jj] = 
-                    //         A_pack[(i + ii) * kc_real + k + jj];
-                    // }
-
-                    // v2
-                    std::memmove(A_L1_local + ii * strideY, 
-                                  A_pack + (i + ii) * kc_real + k, 
-                                  strideY * sizeof(f32));
-
-                    // v3
-                    // asm volatile("# ---- begin copy ----" ::: "memory");
-                    // __m256 A_L1_local_line = _mm256_loadu_ps(A_pack + (i + ii) * kc_real + k);
-                    // _mm256_storeu_ps(A_L1_local + ii * strideY, A_L1_local_line);
-                    // asm volatile("# ---- begin copy ----" ::: "memory");
+                    for (uint jj = 0; jj < strideY; jj += 8) {
+                        __m256 A_L1_local_line = _mm256_loadu_ps(A_pack + (i + ii) * kc_real + k + jj);
+                        _mm256_storeu_ps(A_L1_local + ii * strideY + jj, A_L1_local_line);
+                    }
                 }
 
                 // load B_L1_local (Blocal左上角的坐标为(k, j))
@@ -119,8 +108,8 @@ void gemm_kernel(const float* __restrict__ A_pack,
 
 // A(M,K) * B(K,N) → C(M,N)
 void gemm_test(const float *A, const float *B, float *C) {
-    constexpr int mc = 16;
-    constexpr int kc = 16;
+    constexpr int mc = 64;
+    constexpr int kc = 64;
     constexpr int nc = 128;  
     constexpr int A_cache_size = mc * kc;
     constexpr int B_cache_size = kc * nc;
