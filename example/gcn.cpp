@@ -9,6 +9,7 @@
 #include <iostream>
 #include <iomanip>
 #include <chrono>
+#include "XW/gemm.h"
 
 using namespace std;
 
@@ -93,20 +94,24 @@ void initFloat(float *&dst, int num)
 
 void XW(int in_dim, int out_dim, float *in_X, float *out_X, float *W)
 {
-	auto tmp_in_X  = reinterpret_cast<float (*)[in_dim]>(in_X);
-	auto tmp_out_X = reinterpret_cast<float (*)[out_dim]>(out_X);
-	auto tmp_W     = reinterpret_cast<float (*)[out_dim]>(W);
+	// auto tmp_in_X  = reinterpret_cast<float (*)[in_dim]>(in_X);
+	// auto tmp_out_X = reinterpret_cast<float (*)[out_dim]>(out_X);
+	// auto tmp_W     = reinterpret_cast<float (*)[out_dim]>(W);
+	auto tmp_in_X  = in_X;
+	auto tmp_out_X = out_X;
+	auto tmp_W     = W;
 
-	for (int i = 0; i < v_num; i++)
-	{
-		for (int j = 0; j < out_dim; j++)
-		{
-			for (int k = 0; k < in_dim; k++)
-			{
-				tmp_out_X[i][j] += tmp_in_X[i][k] * tmp_W[k][j];
-			}
-		}
-	}
+	// for (int i = 0; i < v_num; i++)
+	// {
+	// 	for (int j = 0; j < out_dim; j++)
+	// 	{
+	// 		for (int k = 0; k < in_dim; k++)
+	// 		{
+	// 			tmp_out_X[i][j] += tmp_in_X[i][k] * tmp_W[k][j];
+	// 		}
+	// 	}
+	// }
+	gemm_4_XW(tmp_in_X, tmp_W, tmp_out_X, v_num, in_dim, out_dim);
 }
 
 void AX(int dim, float *in_X, float *out_X)
