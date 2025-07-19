@@ -28,7 +28,7 @@ template<uint strideX, uint strideY, uint strideZ>
 inline void gemm_kernel_Btransposed(
                      const float* __restrict__ A_L1_local,
                      const float* __restrict__ B_L1_local, //B需要被转置
-                     float* __restrict__ C_block, 
+                     float* __restrict__ C_L1_local, 
                      int ldc)
 {
     // 子块乘法：A(X,Y) * B(Z,Y) → C(X,Z)
@@ -38,7 +38,7 @@ inline void gemm_kernel_Btransposed(
             for (uint k = 0; k < strideY; ++k) 
                 sum += A_L1_local[i * strideY + k] * 
                        B_L1_local[j * strideY + k];
-            C_block[i * ldc + j] += sum;
+            C_L1_local[i * strideZ + j] += sum;
         }
     }
 }
@@ -56,10 +56,13 @@ void gemm_kernel(const float* __restrict__ A_pack,
     constexpr int strideZ = 4; 
     f32 A_L1_local[strideX * strideY] = {}; // ASize = X * Y
     f32 B_L1_local[strideZ * strideY] = {}; // BSize = Z * Y
+    f32 C_L1_local[strideX * strideZ] = {}; // CSize = X * Z
 
     // 子块乘法：A(mc,kc) * B(kc,nc) → C(mc,nc)
     for (uint i = 0; i < mc_real; i += strideX)
-        for (uint j = 0; j < nc_real; j += strideZ)
+        for (uint j = 0; j < nc_real; j += strideZ) {
+
+            std::memset(C_L1_local, 0, sizeof(C_L1_local));
             for (uint k = 0; k < kc_real; k += strideY) {
 
                 // load A_L1_local (Alocal左上角的坐标为(i, k))
@@ -86,8 +89,16 @@ void gemm_kernel(const float* __restrict__ A_pack,
                 gemm_kernel_Btransposed<strideX, strideY, strideZ>(
                                 A_L1_local, 
                                 B_L1_local, 
-                       C_block + i * N + j, ldc);
+                        C_L1_local, ldc);
             }
+
+            // 将 C_L1_local 写回 C_block
+            for (uint ii = 0; ii < strideX; ++ii) {
+                for (uint jj = 0; jj < strideZ; ++jj) {
+                    C_block[(i + ii) * ldc + (j + jj)] += C_L1_local[ii * strideZ + jj];
+                }
+            }
+        }
 }
 
 // A(M,K) * B(K,N) → C(M,N)
