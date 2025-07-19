@@ -1,6 +1,6 @@
 # Makefile for test.cpp with OpenBLAS support
 CXX = g++
-CXXFLAGS = -O3 -Wall -DUSE_BLAS -mfma -mavx2
+CXXFLAGS = -O3 -Wall -DUSE_BLAS -mfma -mavx2 -fopenmp
 LDFLAGS = -lopenblas
 TARGET = test_openblas
 SRC = test.cpp

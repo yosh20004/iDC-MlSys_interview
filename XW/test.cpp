@@ -4,15 +4,17 @@
 #include <cstring>
 #include <immintrin.h>
 #include <stdexcept>
+#include <omp.h>
 
 #ifdef USE_BLAS
 #include <cblas.h>
 #endif
 
 constexpr int M = 1024;   // 行
-constexpr int K = 64;     // 内
+constexpr int K = 1024;     // 内
 constexpr int N = 1024;     // 列
 constexpr int TIMES = 100;
+constexpr int NUM_THREADS = 8;
 
 using f32 = float;
 
@@ -28,8 +30,7 @@ template<uint strideX, uint strideY, uint strideZ>
 inline void gemm_kernel_Btransposed(
                      const float* __restrict__ A_L1_local,
                      const float* __restrict__ B_L1_local, //B需要被转置
-                     float* __restrict__ C_L1_local, 
-                     int ldc)
+                     float* __restrict__ C_L1_local)
 {
     // 子块乘法：A(X,Y) * B(Z,Y) → C(X,Z)
     for (uint i = 0; i < strideX; ++i) {
@@ -45,8 +46,7 @@ inline void gemm_kernel_Btransposed(
 
 void gemm_kernel(const float* __restrict__ A_pack,
                  const float* __restrict__ B_pack,
-                 float* __restrict__ C_block, 
-                 int ldc,       
+                 float* __restrict__ C_pack, 
                  uint mc_real, 
                  uint nc_real, 
                  uint kc_real) {
@@ -86,17 +86,19 @@ void gemm_kernel(const float* __restrict__ A_pack,
                     }
                 }
 
-                // 4*4 子块乘法
+                // 微内核 子块乘法
                 gemm_kernel_Btransposed<strideX, strideY, strideZ>(
                                 A_L1_local, 
                                 B_L1_local, 
-                                C_L1_local, ldc);
+                                C_L1_local);
             }
 
-            // 将 C_L1_local 写回 C_block
+            // 将 C_L1_local 写回 C_pack
             for (uint ii = 0; ii < strideX; ++ii) {
                 __m128 C_L1_local_line = _mm_loadu_ps(C_L1_local + ii * strideZ);
-                _mm_storeu_ps(C_block + (i + ii) * ldc + j, C_L1_local_line);
+                __m128 C_pack_line = _mm_loadu_ps(C_pack + (i + ii) * nc_real + j);
+                C_L1_local_line = _mm_add_ps(C_L1_local_line, C_pack_line);
+                _mm_storeu_ps(C_pack + (i + ii) * nc_real + j, C_L1_local_line);
             }
         }
 }
@@ -108,38 +110,54 @@ void gemm_test(const float *A, const float *B, float *C) {
     constexpr int nc = 64;  
     constexpr int A_cache_size = mc * kc;
     constexpr int B_cache_size = kc * nc;
+    constexpr int C_cache_size = mc * nc;
 
-    f32* A_cache = alloc<f32>(A_cache_size);
-    f32* B_cache = alloc<f32>(B_cache_size);
+    omp_set_num_threads(NUM_THREADS);
 
-    for (int i = 0; i < M; i += mc) {
-        for (int j = 0; j < N; j += nc) {
-            for (int k = 0; k < K; k += kc) {
-                // load A_cache
+    #pragma omp parallel
+    {
+        f32* A_cache = alloc<f32>(A_cache_size);
+        f32* B_cache = alloc<f32>(B_cache_size);
+        f32* C_cache = alloc<f32>(C_cache_size);
+
+        #pragma omp for schedule(static)
+        for (int i = 0; i < M; i += mc) {
+            for (int j = 0; j < N; j += nc) {
+                std::memset(C_cache, 0, C_cache_size * sizeof(f32));
+
+                for (int k = 0; k < K; k += kc) {
+                    // load A_cache (左上角坐标为(i, k))
+                    for (int ii = 0; ii < mc; ++ii) {
+                        for (int jj = 0; jj < kc; jj += 8) {
+                            __m256 A_cache_line = _mm256_loadu_ps(A + (i + ii) * K + k + jj);
+                            _mm256_storeu_ps(A_cache + ii * kc + jj, A_cache_line);
+                        }
+                    }
+
+                    // load B_cache (左上角坐标为(k, j))
+                    for (int ii = 0; ii < kc; ++ii) {
+                        for (int jj = 0; jj < nc; jj += 8) {
+                            __m256 B_cache_line = _mm256_loadu_ps(B + (k + ii) * N + j + jj);
+                            _mm256_storeu_ps(B_cache + ii * nc + jj, B_cache_line);
+                        }
+                    }
+
+                    gemm_kernel(A_cache, B_cache, 
+                                C_cache, mc, nc, kc);
+                }
+
                 for (int ii = 0; ii < mc; ++ii) {
-                    for (int jj = 0; jj < kc; jj += 8) {
-                        __m256 A_cache_line = _mm256_loadu_ps(A + (i + ii) * K + k + jj);
-                        _mm256_storeu_ps(A_cache + ii * kc + jj, A_cache_line);
+                    for (int jj = 0; jj < nc; ++jj) {
+                        C[(i + ii) * N + j + jj] = C_cache[ii * nc + jj];
                     }
                 }
-
-                // load B_cache
-                for (int ii = 0; ii < kc; ++ii) {
-                    for (int jj = 0; jj < nc; jj += 8) {
-                        __m256 B_cache_line = _mm256_loadu_ps(B + (k + ii) * N + j + jj);
-                        _mm256_storeu_ps(B_cache + ii * nc + jj, B_cache_line);
-                    }
-                }
-
-                gemm_kernel(A_cache, B_cache, 
-                            C + i * N + j, N, mc, nc, kc);
-
             }
         }
-    }
 
-    free(A_cache);
-    free(B_cache);
+        free(A_cache);
+        free(B_cache);
+        free(C_cache);
+    }
 }
 
 
@@ -161,24 +179,26 @@ int main() {
     float *C2 = alloc<f32, true>(M * N);
     float *C3 = alloc<f32, true>(M * N);
 
+    auto warmup = [&A, &B, &C1, &C2]() -> void
     {
         // 预热
-        for (int i=0; i < 50; ++i) {
-            gemm_blas(A, B, C1); 
-            std::memset(C2, 0, M * N * sizeof(float));
+        for (int i=0; i < 100; ++i) {
             gemm_test(A, B, C2); 
         }
-    }
+    };
 
+    warmup();  
     auto t1 = std::chrono::high_resolution_clock::now();
     for (int i=0; i < TIMES; ++i) {
         gemm_blas(A, B, C1);       // OpenBLAS
     }
     auto t2 = std::chrono::high_resolution_clock::now();
+    warmup();
+    auto t3 = std::chrono::high_resolution_clock::now();
     for (int i=0; i < TIMES; ++i) {
         gemm_test(A, B, C2);     // test
     }
-    auto t3 = std::chrono::high_resolution_clock::now();
+    auto t4 = std::chrono::high_resolution_clock::now();
 
     double err = 0;
     for (int i = 0; i < M * N; ++i)
@@ -187,7 +207,7 @@ int main() {
     std::printf("OpenBLAS = %.3f ms\n",
                 std::chrono::duration<double, std::milli>(t2 - t1).count());
     std::printf("My impl1  = %.3f ms\n",
-                std::chrono::duration<double, std::milli>(t3 - t2).count());
+                std::chrono::duration<double, std::milli>(t4 - t3).count());
     // std::printf("Native   = %.3f ms\n",
     //             std::chrono::duration<double, std::milli>(t4 - t3).count());
 
