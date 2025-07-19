@@ -89,14 +89,18 @@ void gemm_kernel(const float* __restrict__ A_pack,
                 gemm_kernel_Btransposed<strideX, strideY, strideZ>(
                                 A_L1_local, 
                                 B_L1_local, 
-                        C_L1_local, ldc);
+                                C_L1_local, ldc);
             }
 
             // 将 C_L1_local 写回 C_block
             for (uint ii = 0; ii < strideX; ++ii) {
-                for (uint jj = 0; jj < strideZ; ++jj) {
-                    C_block[(i + ii) * ldc + (j + jj)] += C_L1_local[ii * strideZ + jj];
-                }
+                // for (uint jj = 0; jj < strideZ; ++jj) {
+                //     C_block[(i + ii) * ldc + (j + jj)] += C_L1_local[ii * strideZ + jj];
+                // }
+                __m128 C_L1_local_line = _mm_loadu_ps(C_L1_local + ii * strideZ);
+                __m128 C_block_line = _mm_loadu_ps(C_block + (i + ii) * ldc + j);
+                C_block_line = _mm_add_ps(C_block_line, C_L1_local_line);
+                _mm_storeu_ps(C_block + (i + ii) * ldc + j, C_block_line);
             }
         }
 }
