@@ -96,9 +96,7 @@ void gemm_kernel(const float* __restrict__ A_pack,
             // 将 C_L1_local 写回 C_block
             for (uint ii = 0; ii < strideX; ++ii) {
                 __m128 C_L1_local_line = _mm_loadu_ps(C_L1_local + ii * strideZ);
-                __m128 C_block_line = _mm_loadu_ps(C_block + (i + ii) * ldc + j);
-                C_block_line = _mm_add_ps(C_block_line, C_L1_local_line);
-                _mm_storeu_ps(C_block + (i + ii) * ldc + j, C_block_line);
+                _mm_storeu_ps(C_block + (i + ii) * ldc + j, C_L1_local_line);
             }
         }
 }
@@ -111,31 +109,37 @@ void gemm_test(const float *A, const float *B, float *C) {
     constexpr int A_cache_size = mc * kc;
     constexpr int B_cache_size = kc * nc;
 
-    static f32* A_cache = alloc<f32>(A_cache_size);
-    static f32* B_cache = alloc<f32>(B_cache_size);
+    f32* A_cache = alloc<f32>(A_cache_size);
+    f32* B_cache = alloc<f32>(B_cache_size);
 
     for (int i = 0; i < M; i += mc) {
-        for (int j = 0; j < K; j += kc) {
-            // load A_cache
-            for (int ii = 0; ii < mc; ++ii) {
-                for (int jj = 0; jj < kc; ++jj) {
-                    A_cache[ii * kc + jj] = A[(i + ii) * K + (j + jj)];
+        for (int j = 0; j < N; j += nc) {
+            for (int k = 0; k < K; k += kc) {
+                // load A_cache
+                for (int ii = 0; ii < mc; ++ii) {
+                    for (int jj = 0; jj < kc; jj += 8) {
+                        __m256 A_cache_line = _mm256_loadu_ps(A + (i + ii) * K + k + jj);
+                        _mm256_storeu_ps(A_cache + ii * kc + jj, A_cache_line);
+                    }
                 }
-            }
 
-            for (int k = 0; k < N; k += nc) {
                 // load B_cache
                 for (int ii = 0; ii < kc; ++ii) {
-                    for (int jj = 0; jj < nc; ++jj) {
-                        B_cache[ii * nc + jj] = B[(j + ii) * N + (k + jj)];
+                    for (int jj = 0; jj < nc; jj += 8) {
+                        __m256 B_cache_line = _mm256_loadu_ps(B + (k + ii) * N + j + jj);
+                        _mm256_storeu_ps(B_cache + ii * nc + jj, B_cache_line);
                     }
                 }
 
                 gemm_kernel(A_cache, B_cache, 
-                        C + i * N + k, N, mc, nc, kc);
+                            C + i * N + j, N, mc, nc, kc);
+
             }
         }
     }
+
+    free(A_cache);
+    free(B_cache);
 }
 
 
@@ -175,12 +179,6 @@ int main() {
         gemm_test(A, B, C2);     // test
     }
     auto t3 = std::chrono::high_resolution_clock::now();
-
-    {
-        // 比较计算结果
-        std::memset(C2, 0, M * N * sizeof(float));
-        gemm_test(A, B, C2);     // test
-    }
 
     double err = 0;
     for (int i = 0; i < M * N; ++i)
