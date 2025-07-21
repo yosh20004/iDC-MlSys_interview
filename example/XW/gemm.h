@@ -3,24 +3,11 @@
 #include <cstdlib>
 #include <chrono>
 #include <cstring>
-<<<<<<< HEAD
-#include <utility>
-#include <memory>
-=======
 #include <immintrin.h>
 #include <stdexcept>
 #include <omp.h>
->>>>>>> main
 
-#ifdef USE_BLAS
-#include <cblas.h>
-#endif
-
-constexpr int M = 1024;   // 行
-constexpr int K = 16;     // 内
-constexpr int N = 8;     // 列
-constexpr int TIMES = 100;
-const int NUM_THREADS = omp_get_num_procs();
+const int NUM_THREADS = 1;
 
 using f32 = float;
 
@@ -32,23 +19,6 @@ T* alloc(int n) {
     return p;
 }
 
-<<<<<<< HEAD
-
-template<uint stride = 4>
-[[gnu::always_inline]] void gemm_kernel_micro(const float* __restrict__ A_L1_local,
-                     const float* __restrict__ B_L1_local,
-                     float* __restrict__ C_block, 
-                     int ldc)
-{
-    // 4x4 子块乘法：A(4,4) * B(4,4) → C(4,4)
-    for (uint32_t i = 0; i < stride; ++i)
-        for (uint32_t j = 0; j < stride; ++j) {
-            float sum = 0.f;
-            for (uint32_t k = 0; k < stride; ++k) 
-                sum += A_L1_local[i * stride + k] * 
-                       B_L1_local[j * stride + k];
-            C_block[i * ldc + j] += sum;
-=======
 template<uint strideX, uint strideY, uint strideZ>
 inline void gemm_micro_kernel_Btransposed(
                      const float* __restrict__ A_micro,
@@ -63,11 +33,11 @@ inline void gemm_micro_kernel_Btransposed(
                 sum += A_micro[i * strideY + k] * 
                        B_micro[j * strideY + k];
             C_micro[i * strideZ + j] += sum;
->>>>>>> main
         }
+    }
 }
 
-void gemm_L1_kernel(const float* __restrict__ A_L1_pack,
+inline void gemm_L1_kernel(const float* __restrict__ A_L1_pack,
                     const float* __restrict__ B_L1_pack,
                     float*       __restrict__ C_L1_pack, 
                     const                uint mc_real, 
@@ -105,17 +75,10 @@ void gemm_L1_kernel(const float* __restrict__ A_L1_pack,
                 }
 
                 // 4*4 子块乘法
-<<<<<<< HEAD
-                gemm_kernel_micro<stride>(
-                                A_L1_local.get(), 
-                                B_L1_local.get(), 
-                                C_block + i * N + j, ldc);
-=======
                 gemm_micro_kernel_Btransposed<strideX, strideY, strideZ>(
                                 A_L1_local, 
                                 B_L1_local, 
                                 C_L1_local);
->>>>>>> main
             }
 
             // 写回 C_L1_pack
@@ -129,7 +92,7 @@ void gemm_L1_kernel(const float* __restrict__ A_L1_pack,
 }
 
 // A(M,K) * B(K,N) → C(M,N)
-void gemm_test(const float *A, 
+inline void gemm_4_XW(const float *A, 
                const float *B, 
                float       *C,
                int          M,
@@ -193,57 +156,3 @@ void gemm_test(const float *A,
     }
 }
 
-
-// OpenBLAS
-void gemm_blas(const float *A, const float *B, float *C) {
-#ifdef USE_BLAS
-    cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
-                M, N, K, 1.0f, A, K, B, N, 0.0f, C, N);
-#else
-    throw std::runtime_error("OpenBLAS is not enabled.");
-#endif
-}
-
-int main() {
-    srand(1234);                // 固定随机种子
-    float *A = alloc<f32, true>(M * K);
-    float *B = alloc<f32, true>(K * N);
-    float *C1 = alloc<f32, true>(M * N);
-    float *C2 = alloc<f32, true>(M * N);
-    float *C3 = alloc<f32, true>(M * N);
-
-    auto warmup = [&A, &B, &C1, &C2]() -> void
-    {
-        // 预热
-        for (int i=0; i < 100; ++i) {
-            gemm_test(A, B, C2, M, K, N); // test
-        }
-    };
-
-    warmup();  
-    auto t1 = std::chrono::high_resolution_clock::now();
-    for (int i=0; i < TIMES; ++i) {
-        gemm_blas(A, B, C1);       // OpenBLAS
-    }
-    auto t2 = std::chrono::high_resolution_clock::now();
-    warmup();
-    auto t3 = std::chrono::high_resolution_clock::now();
-    for (int i=0; i < TIMES; ++i) {
-        gemm_test(A, B, C2, M, K, N);     // test
-    }
-    auto t4 = std::chrono::high_resolution_clock::now();
-
-    double err = 0;
-    for (int i = 0; i < M * N; ++i)
-        err = err > std::abs(C1[i] - C2[i]) ? err : std::abs(C1[i] - C2[i]);
-    std::printf("max diff = %.3e\n", err);
-    std::printf("OpenBLAS = %.3f ms\n",
-                std::chrono::duration<double, std::milli>(t2 - t1).count());
-    std::printf("My impl1  = %.3f ms\n",
-                std::chrono::duration<double, std::milli>(t4 - t3).count());
-    // std::printf("Native   = %.3f ms\n",
-    //             std::chrono::duration<double, std::milli>(t4 - t3).count());
-
-    free(A); free(B); free(C1); free(C2); free(C3);
-    return 0;
-}

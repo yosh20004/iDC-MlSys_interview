@@ -1,7 +1,7 @@
 CXX = g++
-CXXFLAGS = -O3 -Wall -DUSE_BLAS -mfma -mavx2 -fopenmp
-TARGET = example.exe
-SRC = gcn.cpp
+CXXFLAGS = -O0 -Wall
+TARGET = test
+SRC = test.cpp
 
 all: $(TARGET)
 
