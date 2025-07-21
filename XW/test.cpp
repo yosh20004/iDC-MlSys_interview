@@ -16,7 +16,6 @@ constexpr int M = 1024;   // 行
 constexpr int K = 64;     // 内
 constexpr int N = 1024;     // 列
 constexpr int TIMES = 100;
-const int NUM_THREADS = 1;
 
 using f32 = float;
 
