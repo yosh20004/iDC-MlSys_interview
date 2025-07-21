@@ -3,24 +3,20 @@
 #include <cstdlib>
 #include <chrono>
 #include <cstring>
-<<<<<<< HEAD
-#include <utility>
-#include <memory>
-=======
 #include <immintrin.h>
 #include <stdexcept>
 #include <omp.h>
->>>>>>> main
+
 
 #ifdef USE_BLAS
 #include <cblas.h>
 #endif
 
 constexpr int M = 1024;   // 行
-constexpr int K = 16;     // 内
-constexpr int N = 8;     // 列
+constexpr int K = 64;     // 内
+constexpr int N = 1024;     // 列
 constexpr int TIMES = 100;
-const int NUM_THREADS = omp_get_num_procs();
+const int NUM_THREADS = 1;
 
 using f32 = float;
 
@@ -32,39 +28,23 @@ T* alloc(int n) {
     return p;
 }
 
-<<<<<<< HEAD
 
-template<uint stride = 4>
-[[gnu::always_inline]] void gemm_kernel_micro(const float* __restrict__ A_L1_local,
-                     const float* __restrict__ B_L1_local,
-                     float* __restrict__ C_block, 
-                     int ldc)
-{
-    // 4x4 子块乘法：A(4,4) * B(4,4) → C(4,4)
-    for (uint32_t i = 0; i < stride; ++i)
-        for (uint32_t j = 0; j < stride; ++j) {
-            float sum = 0.f;
-            for (uint32_t k = 0; k < stride; ++k) 
-                sum += A_L1_local[i * stride + k] * 
-                       B_L1_local[j * stride + k];
-            C_block[i * ldc + j] += sum;
-=======
 template<uint strideX, uint strideY, uint strideZ>
-inline void gemm_micro_kernel_Btransposed(
+inline void gemm_micro_kernel(
                      const float* __restrict__ A_micro,
-                     const float* __restrict__ B_micro, //B需要被转置
+                     const float* __restrict__ B_micro,
                      float*       __restrict__ C_micro)
 {
-    // 子块乘法：A(X,Y) * B(Z,Y) → C(X,Z)
+    // 子块乘法：A(X,Y) * B(Y,Z) → C(X,Z)
     for (uint i = 0; i < strideX; ++i) {
         for (uint j = 0; j < strideZ; ++j) {
-            float sum = 0.f;
-            for (uint k = 0; k < strideY; ++k) 
-                sum += A_micro[i * strideY + k] * 
-                       B_micro[j * strideY + k];
-            C_micro[i * strideZ + j] += sum;
->>>>>>> main
+            for (uint k = 0; k < strideY; ++k) {
+                C_micro[i * strideZ + j] += 
+                    A_micro[i * strideY + k] * 
+                    B_micro[k * strideZ + j];
+            }
         }
+    }
 }
 
 void gemm_L1_kernel(const float* __restrict__ A_L1_pack,
@@ -76,10 +56,10 @@ void gemm_L1_kernel(const float* __restrict__ A_L1_pack,
                     
     constexpr int strideX = 8;
     constexpr int strideY = 8; 
-    constexpr int strideZ = 4; 
-    f32 A_L1_local[strideX * strideY] = {}; // ASize = X * Y
-    f32 B_L1_local[strideZ * strideY] = {}; // BSize = Z * Y
-    f32 C_L1_local[strideX * strideZ] = {}; // CSize = X * Z
+    constexpr int strideZ = 8; 
+    alignas(64) f32 A_L1_local[strideX * strideY] = {}; // ASize = X * Y
+    alignas(64) f32 B_L1_local[strideZ * strideY] = {}; // BSize = Z * Y
+    alignas(64) f32 C_L1_local[strideX * strideZ] = {}; // CSize = X * Z
     static_assert(strideX % 4 == 0 && strideY % 8 == 0 && strideZ % 4 == 0);
 
     // 子块乘法：A(mc,kc) * B(kc,nc) → C(mc,nc)
@@ -96,34 +76,29 @@ void gemm_L1_kernel(const float* __restrict__ A_L1_pack,
                     }
                 }
 
-                // B_L1_pack[k + ii][j + jj] → Blocal[jj][ii]
+                // B_L1_pack[k + ii][j + jj] → Blocal[ii][jj]
                 for (uint ii = 0; ii < strideY; ++ii) {
-                    for (uint jj = 0; jj < strideZ; ++jj) {
-                        B_L1_local[jj * strideY + ii] = 
-                            B_L1_pack[(k + ii) * nc_real + j + jj];
+                    for (uint jj = 0; jj < strideZ; jj += 8) {
+                        __m256 B_L1_local_line = _mm256_loadu_ps(B_L1_pack + (k + ii) * nc_real + j + jj);
+                        _mm256_storeu_ps(B_L1_local + ii * strideZ + jj, B_L1_local_line);
                     }
                 }
 
-                // 4*4 子块乘法
-<<<<<<< HEAD
-                gemm_kernel_micro<stride>(
-                                A_L1_local.get(), 
-                                B_L1_local.get(), 
-                                C_block + i * N + j, ldc);
-=======
-                gemm_micro_kernel_Btransposed<strideX, strideY, strideZ>(
+                // micro 子块乘法
+                gemm_micro_kernel<strideX, strideY, strideZ>(
                                 A_L1_local, 
                                 B_L1_local, 
                                 C_L1_local);
->>>>>>> main
             }
 
             // 写回 C_L1_pack
+            # pragma omp simd
             for (uint ii = 0; ii < strideX; ++ii) {
-                __m128 C_new = _mm_loadu_ps(C_L1_local + ii * strideZ);
-                __m128 C_origin = _mm_loadu_ps(C_L1_pack + (i + ii) * nc_real + j);
-                C_new = _mm_add_ps(C_origin, C_new);
-                _mm_storeu_ps(C_L1_pack + (i + ii) * nc_real + j, C_new);
+                for (uint jj = 0; jj < strideZ; jj += 1) {
+                    C_L1_pack[(i + ii) * nc_real + j + jj] += 
+                        C_L1_local[ii * strideZ + jj];
+
+                }
             }
         }
 }
@@ -138,49 +113,51 @@ void gemm_test(const float *A,
 {
     assert(M % 8 == 0 && K % 8 == 0 && N % 8 == 0);
 
-    const int mc = M >= 64? 64 : M;
-    const int kc = K >= 64? 64 : K;
-    const int nc = N >= 16? 16 : N;  
+    constexpr int mc = 64;
+    constexpr int kc = 64;
+    constexpr int nc = 64;  
     const int A_L1_pack_size = mc * kc;
     const int B_L1_pack_size = kc * nc;
     const int C_L1_pack_size = mc * nc;
 
-    omp_set_num_threads(NUM_THREADS);
-
     #pragma omp parallel
-    {
-        f32* A_L1_pack = alloc<f32>(A_L1_pack_size);
-        f32* B_L1_pack = alloc<f32>(B_L1_pack_size);
-        f32* C_L1_pack = alloc<f32>(C_L1_pack_size);
+    { 
+        f32 *A_L1_pack = alloc<f32>(A_L1_pack_size);
+        f32 *B_L1_pack = alloc<f32>(B_L1_pack_size);
+        f32 *C_L1_pack = alloc<f32>(C_L1_pack_size);
 
         #pragma omp for schedule(static)
-        for (int i = 0; i < M; i += mc) {
-            for (int j = 0; j < N; j += nc) {
+        for (int i = 0; i < M; i += mc)
+        {
+            for (int j = 0; j < N; j += nc)
+            {
                 std::memset(C_L1_pack, 0, C_L1_pack_size * sizeof(f32));
-
-                for (int k = 0; k < K; k += kc) {
+                for (int k = 0; k < K; k += kc)
+                {
                     // load A_L1_pack (左上角坐标为(i, k))
-                    for (int ii = 0; ii < mc; ++ii) {
-                        for (int jj = 0; jj < kc; jj += 8) {
-                            __m256 A_L1_pack_line = _mm256_loadu_ps(A + (i + ii) * K + k + jj);
-                            _mm256_storeu_ps(A_L1_pack + ii * kc + jj, A_L1_pack_line);
+                    for (int ii = 0; ii < mc; ++ii)
+                    {
+                        for (int jj = 0; jj < kc; jj += 1) {
+                            A_L1_pack[ii * kc + jj] = A[(i + ii) * K + (k + jj)];
                         }
                     }
 
                     // load B_L1_pack (左上角坐标为(k, j))
-                    for (int ii = 0; ii < kc; ++ii) {
-                        for (int jj = 0; jj < nc; jj += 8) {
-                            __m256 B_L1_pack_line = _mm256_loadu_ps(B + (k + ii) * N + j + jj);
-                            _mm256_storeu_ps(B_L1_pack + ii * nc + jj, B_L1_pack_line);
+                    for (int ii = 0; ii < kc; ++ii)
+                    {
+                        for (int jj = 0; jj < nc; jj += 1) {
+                            B_L1_pack[ii * nc + jj] = B[(k + ii) * N + (j + jj)];
                         }
                     }
 
-                    gemm_L1_kernel(A_L1_pack, B_L1_pack, 
-                                   C_L1_pack, mc, nc, kc);
+                    gemm_L1_kernel(A_L1_pack, B_L1_pack,
+                                C_L1_pack, mc, nc, kc);
                 }
 
-                for (int ii = 0; ii < mc; ++ii) {
-                    for (int jj = 0; jj < nc; ++jj) {
+                for (int ii = 0; ii < mc; ++ii)
+                {
+                    for (int jj = 0; jj < nc; ++jj)
+                    {
                         C[(i + ii) * N + j + jj] = C_L1_pack[ii * nc + jj];
                     }
                 }
