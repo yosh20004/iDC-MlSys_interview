@@ -2,15 +2,34 @@
 #include <cmath>
 #include "prepare.h"
 #include <chrono>
-constexpr int TIMES = 100;
+#include <cstring>
+constexpr int TIMES = 2;
 
 void AX_test(const CSRGraph &A_csr, 
              const f32*      X,
              f32*            Y,
              const uint      v_num) 
 {
+    const auto& indices = A_csr.indices;
+    const auto& data = A_csr.data;
+    const auto& index_pointers = A_csr.index_pointers;
 
-            
+    std::memset(Y, 0, v_num * v_num * sizeof(f32));
+
+    for (uint i = 0; i < v_num; ++i) {
+        // 第i行的A非零元素列索引范围为[start, end)
+        const uint start = index_pointers[i];
+        const uint end = index_pointers[i + 1];
+
+        for (uint j = 0; j < v_num; ++j) {
+            for (uint k = start; k < end; ++k) {
+                const uint A_col_index = indices[k];
+                const f32 A_val = data[k];
+                const f32 X_val = X[A_col_index * v_num + j];
+                Y[i * v_num + j] += A_val * X_val;
+            }
+        }
+    }
 }
 
 
@@ -45,7 +64,8 @@ int main() {
 
     double err = 0;
     for (uint i = 0; i < v_num * v_num; ++i)
-        err = err > std::abs(Y_mkl - Y_self) ? err : std::abs(Y_mkl - Y_self);
+        err = err > std::abs(Y_mkl[i] - Y_self[i]) ? 
+              err : std::abs(Y_mkl[i] - Y_self[i]);
 
     std::printf("max diff = %.3e\n", err);
     std::printf("Intel MKL = %.3f ms\n",
