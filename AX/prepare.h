@@ -114,7 +114,7 @@ template<typename T, bool random = false>
 T* alloc(int n) {
     T *p = (float *)aligned_alloc(64, n * sizeof(T));
     if constexpr (random)
-        for (int i = 0; i < n; ++i) p[i] = (T)(rand()) / RAND_MAX;
+        for (int i = 0; i < n; ++i) p[i] = (T)(rand()) / static_cast<f32>(RAND_MAX);
     return p;
 }
 
