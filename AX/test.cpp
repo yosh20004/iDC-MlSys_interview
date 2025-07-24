@@ -6,9 +6,10 @@
 #include <omp.h>
 constexpr int TIMES = 1000;
 
-void AX_test(const CSRGraph &A_csr, 
-             const f32*      X,
-             f32*            Y,
+void AX_test(const CSRGraph &A_csr, // raw_graph : (v_num * v_num)
+             const f32*      X,     // X : (v_num * dim)
+             f32*            Y,     // Y : (v_num * dim)
+             const uint      dim,
              const uint      v_num) 
 {   
     // A行主序遍历
@@ -16,20 +17,20 @@ void AX_test(const CSRGraph &A_csr,
     for (uint i = 0; i < v_num; ++i) {
         const uint start = A_csr.index_pointers[i];
         const uint end = A_csr.index_pointers[i + 1];
-        f32* const Y_row = Y + i * v_num;
+        f32* const Y_row = Y + i * dim;
     
         #pragma omp simd
-        for (uint j = 0; j < v_num; ++j) {
+        for (uint j = 0; j < dim; ++j) {
             Y_row[j] = 0.0f;
         }    
 
         for (uint k = start; k < end; ++k) {
             const uint A_col_index = A_csr.indices[k];
             const f32 A_val = A_csr.data[k];
-            const f32* X_row = &X[A_col_index * v_num];
+            const f32* X_row = &X[A_col_index * dim];
             
             #pragma omp simd
-            for (uint j = 0; j < v_num; ++j) {
+            for (uint j = 0; j < dim; ++j) {
                 Y_row[j] += A_val * X_row[j];
             }
         }

@@ -10,9 +10,9 @@
 #include <iomanip>
 #include <chrono>
 #include "XW/gemm.h"
+#include "AX/gemm.h"
 
 using namespace std;
-
 typedef std::chrono::time_point<std::chrono::steady_clock> TimePoint;
 
 int v_num = 0;
@@ -23,6 +23,7 @@ vector<vector<int>> edge_index;
 vector<vector<float>> edge_val;
 vector<int> degree;
 vector<int> raw_graph;
+CSRGraph_t csrGraph;
 
 float *X0, *W1, *W2, *X1, *X1_inter, *X2, *X2_inter;
 
@@ -190,7 +191,8 @@ void freeFloats()
 void somePreprocessing()
 {
 	//The graph  will be transformed into adjacency list ,you can use other data structure such as CSR
-	raw_graph_to_AdjacencyList();
+	// raw_graph_to_AdjacencyList();
+	csrGraph = RawGraph2CSR(raw_graph, v_num);
 }
 
 int main(int argc, char **argv)
@@ -216,18 +218,18 @@ int main(int argc, char **argv)
 	// Preprocessing time should be included
 
 	TimePoint prepross_start = chrono::steady_clock::now();
-	somePreprocessing();
+	somePreprocessing();  // RawGrpah -> CSR
 	TimePoint prepross_end = chrono::steady_clock::now();
 	chrono::duration<double> prepross_ = prepross_end - prepross_start;
 	double prepross_time = prepross_.count() * 1e3;
 	printf("prepross_time: %.8lf\n", prepross_time);
 
-	TimePoint edgeNorm_start = chrono::steady_clock::now();
-	edgeNormalization();
-	TimePoint edgeNorm_end = chrono::steady_clock::now();
-	chrono::duration<double> edgeNorm_ = edgeNorm_end - edgeNorm_start;
-	double edgeNorm_time = edgeNorm_.count() * 1e3;
-	printf("edgeNorm_time: %.8lf\n", edgeNorm_time);
+	// TimePoint edgeNorm_start = chrono::steady_clock::now();
+	// edgeNormalization();
+	// TimePoint edgeNorm_end = chrono::steady_clock::now();
+	// chrono::duration<double> edgeNorm_ = edgeNorm_end - edgeNorm_start;
+	// double edgeNorm_time = edgeNorm_.count() * 1e3;
+	// printf("edgeNorm_time: %.8lf\n", edgeNorm_time);
 
 
 	// printf("Layer1 XW\n");
@@ -242,7 +244,8 @@ int main(int argc, char **argv)
 
 	// printf("Layer1 AX\n");
 	TimePoint AX1_start = chrono::steady_clock::now();
-	AX(F1, X1_inter, X1);
+	// AX(F1, X1_inter, X1);
+	gemm_4_AX(csrGraph, X1_inter, X1, F1, v_num);
 	TimePoint AX1_end = chrono::steady_clock::now();
 	chrono::duration<double> AX1_ = AX1_end - AX1_start;
 	double AX1_time = AX1_.count() * 1e3;
@@ -266,7 +269,8 @@ int main(int argc, char **argv)
 
 	// printf("Layer2 AX\n");
 	TimePoint AX2_start = chrono::steady_clock::now();
-	AX(F2, X2_inter, X2);
+	// AX(F2, X2_inter, X2);
+	gemm_4_AX(csrGraph, X2_inter, X2, F2, v_num);
 	TimePoint AX2_end = chrono::steady_clock::now();
 	chrono::duration<double> AX2_ = AX2_end - AX2_start;
 	double AX2_time = AX2_.count() * 1e3;

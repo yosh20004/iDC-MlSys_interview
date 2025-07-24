@@ -1,5 +1,5 @@
 CXX = clang++
-CXXFLAGS = -O3 -Wall -I/usr/include/mkl
+CXXFLAGS = -O3 -Wall -I/usr/include/mkl -fopenmp
 TARGET = test
 SRC = test.cpp
 
