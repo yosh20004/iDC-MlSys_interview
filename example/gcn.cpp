@@ -1,16 +1,14 @@
-#include <memory>
 #include <stdio.h>
 #include <vector>
 #include <fstream>
-#include <sstream>
 #include <math.h>
 #include <string.h>
 #include <omp.h>
 #include <iostream>
-#include <iomanip>
 #include <chrono>
 #include "XW/gemm.h"
-#include "AX/gemm.h"
+#include "AX/cpu_gemm.h"
+#include "AX/cuda_gemm.cuh"
 
 using namespace std;
 typedef std::chrono::time_point<std::chrono::steady_clock> TimePoint;
@@ -245,7 +243,8 @@ int main(int argc, char **argv)
 	// printf("Layer1 AX\n");
 	TimePoint AX1_start = chrono::steady_clock::now();
 	// AX(F1, X1_inter, X1);
-	gemm_4_AX(csrGraph, X1_inter, X1, F1, v_num);
+	// cpu::gemm_4_AX(csrGraph, X1_inter, X1, F1, v_num);
+	cuda::gemm_4_AX(csrGraph, X1_inter, X1, F1, v_num);
 	TimePoint AX1_end = chrono::steady_clock::now();
 	chrono::duration<double> AX1_ = AX1_end - AX1_start;
 	double AX1_time = AX1_.count() * 1e3;
@@ -270,7 +269,7 @@ int main(int argc, char **argv)
 	// printf("Layer2 AX\n");
 	TimePoint AX2_start = chrono::steady_clock::now();
 	// AX(F2, X2_inter, X2);
-	gemm_4_AX(csrGraph, X2_inter, X2, F2, v_num);
+	cpu::gemm_4_AX(csrGraph, X2_inter, X2, F2, v_num);
 	TimePoint AX2_end = chrono::steady_clock::now();
 	chrono::duration<double> AX2_ = AX2_end - AX2_start;
 	double AX2_time = AX2_.count() * 1e3;
