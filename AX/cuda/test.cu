@@ -16,11 +16,13 @@ int main() {
     f32* d_Y = nullptr;
     int* d_col_indices = nullptr;
     int* d_row_indices = nullptr;
+    int* d_index_pointers = nullptr;
     f32* d_data = nullptr;
 
     cudaMalloc((void**)&d_X, v_num * dim * sizeof(f32));
     cudaMalloc((void**)&d_col_indices, csrA.col_indices.size() * sizeof(int));
     cudaMalloc((void**)&d_row_indices, csrA.row_indices.size() * sizeof(int));
+    cudaMalloc((void**)&d_index_pointers, csrA.index_pointers.size() * sizeof(int));
     cudaMalloc((void**)&d_data, csrA.data.size() * sizeof(f32));
     cudaMalloc((void**)&d_Y, v_num * dim * sizeof(f32));
 
@@ -28,9 +30,11 @@ int main() {
     cudaMemcpy(d_col_indices, csrA.col_indices.data(), nnz * sizeof(int), cudaMemcpyHostToDevice);
     cudaMemcpy(d_row_indices, csrA.row_indices.data(), nnz * sizeof(int), cudaMemcpyHostToDevice);
     cudaMemcpy(d_data, csrA.data.data(), nnz * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_index_pointers, csrA.index_pointers.data(), csrA.index_pointers.size() * sizeof(f32), cudaMemcpyHostToDevice);
     cudaMemset(d_Y, 0, v_num * dim * sizeof(float)); 
 
-    cuda::CSRGraph_t d_csrA = {d_col_indices, 
+    cuda::CSRGraph_t d_csrA = {d_index_pointers,
+                               d_col_indices, 
                                d_row_indices,
                                d_data};
 
@@ -55,7 +59,7 @@ int main() {
 
     cudaError_t err_msg = cudaGetLastError();
     if (err_msg != cudaSuccess) {
-        printf("err : %s", cudaGetErrorString(err_msg));
+        printf("err : %s\n", cudaGetErrorString(err_msg));
     }
 
     f32* h_Y;

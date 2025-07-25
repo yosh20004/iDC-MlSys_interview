@@ -62,3 +62,37 @@ namespace cuda {
         }
     }
 }
+
+
+namespace cuda {
+    // this kernel requires BlockSize == 512
+    __global__ void gemm_4_AX_v3(const CSRGraph_t d_csrA, // v_num * v_num 
+                                 const f32* X,            // v_num * dim
+                                 f32* Y,                  // v_num * dim
+                                 const uint v_num,
+                                 const uint dim)
+    {
+        const uint Y_row_index = blockIdx.x;
+        const uint Y_col_index = blockIdx.y;
+        const uint stride = blockDim.x;
+
+        const uint A_col_start_index = d_csrA.index_pointers[Y_row_index];
+        const uint A_col_end_index = d_csrA.index_pointers[Y_row_index + 1];
+
+        __shared__ f32 buffer[512];
+        buffer[threadIdx.x] = 0.0f;
+
+        for (uint i = A_col_start_index; 
+            i < A_col_end_index; i += stride) {
+            
+            const uint local_index = i + threadIdx.x;
+            if (local_index >= A_col_end_index) 
+                return;
+            
+            const uint X_row_index = local_index;
+            const f32 A_ele = d_csrA.data[]
+            const f32 X_ele = 
+            buffer[threadIdx.x] += 
+        }
+    }        
+}

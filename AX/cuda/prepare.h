@@ -23,7 +23,8 @@ namespace cpu {
 
 namespace cuda {
     struct CSRGraph_t {
-        int* col_indices;      // 边的列索引
+        int* index_pointers;
+        int* col_indices;      
         int* row_indices;
         f32* data;             // 边权
     };
