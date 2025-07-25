@@ -7,8 +7,9 @@
 #include <algorithm>
 #include <cmath>
 
-inline uint v_num = 1024; // 图节点数 
-inline uint dim = 256; // A:(v_num*v_num) X:(v_num,dim)
+inline uint v_num = 1024 * 8; // 图节点数 
+inline uint dim = 256 * 8; // A:(v_num*v_num) X:(v_num,dim)
+constexpr uint TIMES = 1000;
 using f32 = float;
 
 namespace cpu {

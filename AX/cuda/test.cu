@@ -1,6 +1,8 @@
 #include "prepare.h"
 #include <cuda_runtime.h>
+#include <chrono>
 
+typedef std::chrono::time_point<std::chrono::steady_clock> TimePoint;
 
 namespace cuda {
     __global__ void gemm_4_AX(const CSRGraph_t d_csrA, // v_num * v_num 
@@ -63,13 +65,19 @@ int main() {
                                 1,
                                 (dim + BlockSize.x - 1) / BlockSize.x};
     
-    cuda::gemm_4_AX<<<gridSize, BlockSize>>>(d_csrA, 
-                                             d_X,
-                                             d_Y,
-                                             v_num,
-                                             dim           );
-
     cudaDeviceSynchronize();
+    TimePoint t1 = std::chrono::steady_clock::now();
+    for (int i = 0; i < TIMES; ++i) {
+        cudaMemset(d_Y, 0, v_num * dim * sizeof(float)); 
+        cuda::gemm_4_AX<<<gridSize, BlockSize>>>(d_csrA, 
+                                                d_X,
+                                                d_Y,
+                                                v_num,
+                                                dim           );
+
+        cudaDeviceSynchronize();
+    }
+    TimePoint t2 = std::chrono::steady_clock::now();
 
     cudaError_t err_msg = cudaGetLastError();
     if (err_msg != cudaSuccess) {
@@ -90,4 +98,6 @@ int main() {
               err : std::abs(h_Y[i] - correct_Y[i]);
     }
     std::printf("max diff = %.3e\n", err);
+    std::printf("avg_time : %.3f ms\n",
+                std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count() / (double)TIMES);
 }
