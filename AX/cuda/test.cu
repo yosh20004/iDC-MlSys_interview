@@ -43,11 +43,11 @@ int main() {
     TimePoint t1 = std::chrono::steady_clock::now();
     for (int i = 0; i < TIMES; ++i) {
         cudaMemset(d_Y, 0, v_num * dim * sizeof(float)); 
-        cuda::gemm_4_AX_v1<<<gridSize, BlockSize>>>(d_csrA, 
-                                                d_X,
-                                                d_Y,
-                                                v_num,
-                                                dim           );
+        cuda::gemm_4_AX_v2<<<gridSize, BlockSize>>>(d_csrA, 
+                                                    d_X,
+                                                    d_Y,
+                                                    v_num,
+                                                    dim           );
 
         cudaDeviceSynchronize();
     }
