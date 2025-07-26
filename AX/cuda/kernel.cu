@@ -132,6 +132,7 @@ namespace cuda {
 }
 
 
+
 namespace cuda {
     template<uint COL_PER_BLOCK, uint STRIDE>
     __global__ void gemm_4_AX_v4(const CSRGraph_t d_csrA, // v_num * v_num 
@@ -173,16 +174,17 @@ namespace cuda {
 
         if (threadIdx.x == 0) {
             f32 sum = 0.0f;
+            #pragma unroll
             for (uint j = 0; j < STRIDE; ++j) {
                 sum += buffer[threadIdx.y][j];
             }
-   
-            if (Y_col_index < dim) {
+
+            if (Y_col_index < dim) 
                 Y[Y_row_index * dim + Y_col_index] = sum;
-            }
         }
     }
 }
+
 
 
 
@@ -201,7 +203,7 @@ namespace cuda {
                                    1,
                                    (dim + BlockSize.x - 1) / BlockSize.x};
         cudaMemset(d_Y, 0, v_num * dim * sizeof(float)); 
-        std::printf("nnz = %d", nnz);
+        std::printf("nnz = %d\n", nnz);
         for (int i = 0; i < TIMES; ++i) {
             cudaMemset(d_Y, 0, v_num * dim * sizeof(float)); 
             cuda::gemm_4_AX_v1<<<gridSize, BlockSize>>>(d_csrA, 
@@ -213,7 +215,6 @@ namespace cuda {
         }
     }
 }
-
 
 
 namespace cuda {
@@ -282,8 +283,8 @@ namespace cuda {
                                    const uint dim)
     {
 
-        constexpr uint COL_PER_BLOCK = 32;
-        constexpr uint STRIDE = 16;
+        constexpr uint COL_PER_BLOCK = 64;
+        constexpr uint STRIDE = 2;
         const dim3 BlockSize = dim3{STRIDE, COL_PER_BLOCK, 1};
         const dim3 gridSize = dim3{v_num,
                                    (dim + COL_PER_BLOCK - 1) / COL_PER_BLOCK,

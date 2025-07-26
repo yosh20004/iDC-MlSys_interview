@@ -7,7 +7,7 @@
 typedef std::chrono::time_point<std::chrono::steady_clock> TimePoint;
 
 int main() {
-    const auto raw_graph = make_raw_graph(v_num); // A:(v_num, v_num)
+    const auto raw_graph = make_raw_graph(v_num, 30); // A:(v_num, v_num)
     const cpu::CSRGraph_t csrA = RawGraph2CSR(raw_graph, v_num);
 
     const auto X = alloc<f32, true>(v_num * dim); // X:(v_num, dim)
