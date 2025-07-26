@@ -1,5 +1,6 @@
 #include "kernel.cuh"
 #include "prepare.h"
+#include <cstdio>
 
 
 namespace cuda {
@@ -132,6 +133,7 @@ namespace cuda {
 
 
 namespace cuda {
+    template<uint COL_PER_BLOCK, uint STRIDE>
     __global__ void gemm_4_AX_v4(const CSRGraph_t d_csrA, // v_num * v_num 
                                  const f32* X,            // v_num * dim
                                  f32* Y,                  // v_num * dim
@@ -139,15 +141,14 @@ namespace cuda {
                                  const uint dim)
     {
         const uint Y_row_index = blockIdx.x;
-        const uint Y_col_index = blockIdx.y * 16 + threadIdx.y;
+        const uint Y_col_index = blockIdx.y * COL_PER_BLOCK + threadIdx.y;
         const uint stride = blockDim.x;
-        const uint Y_line_size = blockDim.y;
         if (Y_col_index >= dim) 
             return;
 
         const uint start_index = d_csrA.index_pointers[Y_row_index];
         const uint end_index = d_csrA.index_pointers[Y_row_index + 1];
-        __shared__ f32 buffer[16][16];
+        __shared__ f32 buffer[COL_PER_BLOCK][STRIDE];
         buffer[threadIdx.y][threadIdx.x] = 0.0f;
         __syncthreads();
 
@@ -171,29 +172,18 @@ namespace cuda {
         __syncthreads();
 
         if (threadIdx.x == 0) {
-            f32 sum = buffer[threadIdx.y][0] + 
-                      buffer[threadIdx.y][1] + 
-                      buffer[threadIdx.y][2] + 
-                      buffer[threadIdx.y][3] +
-                      buffer[threadIdx.y][4] +
-                      buffer[threadIdx.y][5] +
-                      buffer[threadIdx.y][6] +
-                      buffer[threadIdx.y][7] +
-                      buffer[threadIdx.y][8] +
-                      buffer[threadIdx.y][9] +
-                      buffer[threadIdx.y][10] +
-                      buffer[threadIdx.y][11] +
-                      buffer[threadIdx.y][12] +
-                      buffer[threadIdx.y][13] +
-                      buffer[threadIdx.y][14] +
-                      buffer[threadIdx.y][15];
-
+            f32 sum = 0.0f;
+            for (uint j = 0; j < STRIDE; ++j) {
+                sum += buffer[threadIdx.y][j];
+            }
+   
             if (Y_col_index < dim) {
                 Y[Y_row_index * dim + Y_col_index] = sum;
             }
         }
     }
 }
+
 
 
 
@@ -211,6 +201,7 @@ namespace cuda {
                                    1,
                                    (dim + BlockSize.x - 1) / BlockSize.x};
         cudaMemset(d_Y, 0, v_num * dim * sizeof(float)); 
+        std::printf("nnz = %d", nnz);
         for (int i = 0; i < TIMES; ++i) {
             cudaMemset(d_Y, 0, v_num * dim * sizeof(float)); 
             cuda::gemm_4_AX_v1<<<gridSize, BlockSize>>>(d_csrA, 
@@ -290,14 +281,18 @@ namespace cuda {
                                    const uint v_num,
                                    const uint dim)
     {
-        const dim3 BlockSize = dim3{16, 16, 1};
+
+        constexpr uint COL_PER_BLOCK = 32;
+        constexpr uint STRIDE = 16;
+        const dim3 BlockSize = dim3{STRIDE, COL_PER_BLOCK, 1};
         const dim3 gridSize = dim3{v_num,
-                                   (dim + 16 - 1) / 16,
+                                   (dim + COL_PER_BLOCK - 1) / COL_PER_BLOCK,
                                    1};
+
         cudaMemset(d_Y, 0, v_num * dim * sizeof(float)); 
         for (int i = 0; i < TIMES; ++i) {
             cudaMemset(d_Y, 0, v_num * dim * sizeof(float)); 
-            cuda::gemm_4_AX_v4<<<gridSize, BlockSize>>>(d_csrA, 
+            cuda::gemm_4_AX_v4<COL_PER_BLOCK, STRIDE> <<<gridSize, BlockSize>>>(d_csrA, 
                                                        d_X,
                                                        d_Y,
                                                        v_num,
