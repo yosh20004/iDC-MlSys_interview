@@ -1,5 +1,6 @@
 #include "prepare.h"
 #include "kernel.cuh"
+#include <cstdio>
 #include <cuda_runtime.h>
 #include <chrono>
 
@@ -37,24 +38,9 @@ int main() {
                                d_col_indices, 
                                d_row_indices,
                                d_data};
-
-    const dim3 BlockSize = 512;
-    const dim3 gridSize = dim3{ nnz,
-                                1,
-                                (dim + BlockSize.x - 1) / BlockSize.x};
     
-    cudaDeviceSynchronize();
     TimePoint t1 = std::chrono::steady_clock::now();
-    for (int i = 0; i < TIMES; ++i) {
-        cudaMemset(d_Y, 0, v_num * dim * sizeof(float)); 
-        cuda::gemm_4_AX_v2<<<gridSize, BlockSize>>>(d_csrA, 
-                                                    d_X,
-                                                    d_Y,
-                                                    v_num,
-                                                    dim           );
-
-        cudaDeviceSynchronize();
-    }
+    cuda::launch_kernel<cuda::version::v4>(d_csrA, nnz, d_X, d_Y, v_num, dim);
     TimePoint t2 = std::chrono::steady_clock::now();
 
     cudaError_t err_msg = cudaGetLastError();
@@ -74,6 +60,9 @@ int main() {
     for (uint i = 0; i < v_num * dim; ++i) {
         err = err > std::abs(h_Y[i] - correct_Y[i]) ? 
               err : std::abs(h_Y[i] - correct_Y[i]);
+
+        // std::printf("h_Y[%d] = %.3f, correct_Y[%d] = %.3f\n", 
+        //             i, h_Y[i], i, correct_Y[i]);
     }
     std::printf("max diff = %.3e\n", err);
     std::printf("avg_time : %.3f ms\n",

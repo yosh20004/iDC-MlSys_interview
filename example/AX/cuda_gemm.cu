@@ -3,10 +3,10 @@
 
 namespace cuda {
     void gemm_4_AX(const CSRGraph_t &A_csr, // raw_graph : (v_num * v_num)
-                const f32*      X,       // X : (v_num * dim)
-                f32*            Y,       // Y : (v_num * dim)
-                const uint      dim,
-                const uint      v_num) 
+                   const f32*      X,       // X : (v_num * dim)
+                   f32*            Y,       // Y : (v_num * dim)
+                   const uint      dim,
+                   const uint      v_num) 
     {
         // 1. 获取矩阵维度信息
         const int m = v_num;

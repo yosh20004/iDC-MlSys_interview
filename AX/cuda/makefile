@@ -2,7 +2,7 @@ CXX = g++-11
 NVCC = nvcc
 
 CXXFLAGS = -O3 -Wall -mfma -mavx2 -fopenmp -std=c++17
-NVCCFLAGS = -O3 -std=c++17 -ccbin $(CXX)
+NVCCFLAGS = -O3 -std=c++17 -ccbin $(CXX) --extended-lambda
 
 LDFLAGS = -L/usr/local/cuda/lib64 -lcudart
 
