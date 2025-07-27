@@ -5,7 +5,7 @@
 #define GET_RUN_TIMES(mode) ((mode) == RunMode::Bench ? TIMES : 1)
 
 namespace cuda {
-    enum class version { v1, v2, v3, v4, cuSPARSE };
+    enum class version { v1, v2, v3, v4, v5, cuSPARSE };
     enum class RunMode { Bench, Production };
 
     template<version v>
