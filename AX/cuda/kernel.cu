@@ -142,22 +142,21 @@ namespace cuda {
                                  const uint dim)
     {
         const uint Y_row_index = blockIdx.x;
-        const uint Y_col_index = blockIdx.y * COL_PER_BLOCK + threadIdx.y;
-        const uint stride = blockDim.x;
+        const uint Y_col_index = blockIdx.y * COL_PER_BLOCK + threadIdx.x * 4;
         if (Y_col_index >= dim) 
             return;
 
         const uint start_index = d_csrA.index_pointers[Y_row_index];
         const uint end_index = d_csrA.index_pointers[Y_row_index + 1];
-        __shared__ f32 buffer[COL_PER_BLOCK][STRIDE];
-        buffer[threadIdx.y][threadIdx.x] = 0.0f;
-        __syncthreads();
+
+        f32 local_sum[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+        __shared__ f32 buffer[COL_PER_BLOCK][STRIDE + 1];
 
         for (uint i = start_index; 
              i < end_index; 
-             i += stride) {
+             i += STRIDE) {
             
-            const uint local_index = i + threadIdx.x;
+            const uint local_index = i + threadIdx.y;
             if (local_index >= end_index) 
                 continue;
             
@@ -166,21 +165,51 @@ namespace cuda {
             const uint X_col_index = Y_col_index;
 
             const f32 A_ele = d_csrA.data[local_index];
-            const f32 X_ele = X[X_row_index * dim + X_col_index];
+            if (X_col_index + 3 < dim) {
+                float4 X_ele = 
+                    *reinterpret_cast<const float4*>(&X[X_row_index * dim + X_col_index]);
+                local_sum[0] += A_ele * X_ele.x;
+                local_sum[1] += A_ele * X_ele.y;
+                local_sum[2] += A_ele * X_ele.z;
+                local_sum[3] += A_ele * X_ele.w;
+            }
 
-            buffer[threadIdx.y][threadIdx.x] += A_ele * X_ele;
+            else {
+                for (uint j = 0; j < 4; ++j) {
+                    if (X_col_index + j < dim) {
+                        local_sum[j] += A_ele * 
+                                        X[X_row_index * dim + X_col_index + j];
+                    }
+                }
+            }
+
         }
         __syncthreads();
 
-        if (threadIdx.x == 0) {
-            f32 sum = 0.0f;
+        buffer[threadIdx.x * 4 + 0][threadIdx.y] = local_sum[0];
+        buffer[threadIdx.x * 4 + 1][threadIdx.y] = local_sum[1];
+        buffer[threadIdx.x * 4 + 2][threadIdx.y] = local_sum[2];
+        buffer[threadIdx.x * 4 + 3][threadIdx.y] = local_sum[3];
+        __syncthreads();
+
+        if (threadIdx.y == 0) {
+            float4 sum = {0.0f, 0.0f, 0.0f, 0.0f};
             #pragma unroll
             for (uint j = 0; j < STRIDE; ++j) {
-                sum += buffer[threadIdx.y][j];
+                sum.x += buffer[threadIdx.x * 4 + 0][j];
+                sum.y += buffer[threadIdx.x * 4 + 1][j];
+                sum.z += buffer[threadIdx.x * 4 + 2][j];
+                sum.w += buffer[threadIdx.x * 4 + 3][j];
             }
 
-            if (Y_col_index < dim) 
-                Y[Y_row_index * dim + Y_col_index] = sum;
+            if (Y_col_index + 3 < dim) {
+                (float4&) Y[Y_row_index * dim + Y_col_index] = (float4&) sum;
+            } else {
+                f32 tmp[4] = {sum.x, sum.y, sum.z, sum.w};
+                for (uint i = 0; Y_col_index + i < dim && i < 4; ++i) {
+                    Y[Y_row_index * dim + Y_col_index + i] = tmp[i];
+                }
+            }
         }
     }
 }
@@ -283,9 +312,9 @@ namespace cuda {
                                    const uint dim)
     {
 
-        constexpr uint COL_PER_BLOCK = 64;
+        constexpr uint COL_PER_BLOCK = 32 * 4;
         constexpr uint STRIDE = 2;
-        const dim3 BlockSize = dim3{STRIDE, COL_PER_BLOCK, 1};
+        const dim3 BlockSize = dim3{COL_PER_BLOCK / 4, STRIDE, 1};
         const dim3 gridSize = dim3{v_num,
                                    (dim + COL_PER_BLOCK - 1) / COL_PER_BLOCK,
                                    1};
