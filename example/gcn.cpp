@@ -6,9 +6,10 @@
 #include <omp.h>
 #include <iostream>
 #include <chrono>
-#include "XW/gemm.h"
-#include "AX/cpu_gemm.h"
-#include "AX/cuda_gemm.cuh"
+#include "cpu/XW/gemm.h"
+#include "cpu/AX/cpu_gemm.h"
+
+#include "cuda/AX/gemm.cuh"
 
 using namespace std;
 typedef std::chrono::time_point<std::chrono::steady_clock> TimePoint;
@@ -22,6 +23,7 @@ vector<vector<float>> edge_val;
 vector<int> degree;
 vector<int> raw_graph;
 CSRGraph_t csrGraph;
+cuda::CSRGraph_t d_csrA;
 
 float *X0, *W1, *W2, *X1, *X1_inter, *X2, *X2_inter;
 
@@ -191,6 +193,7 @@ void somePreprocessing()
 	//The graph  will be transformed into adjacency list ,you can use other data structure such as CSR
 	// raw_graph_to_AdjacencyList();
 	csrGraph = RawGraph2CSR(raw_graph, v_num);
+	d_csrA = cuda::host2device(csrGraph);
 }
 
 int main(int argc, char **argv)
@@ -242,13 +245,27 @@ int main(int argc, char **argv)
 
 	// printf("Layer1 AX\n");
 	TimePoint AX1_start = chrono::steady_clock::now();
-	// AX(F1, X1_inter, X1);
-	// cpu::gemm_4_AX(csrGraph, X1_inter, X1, F1, v_num);
-	cuda::gemm_4_AX(csrGraph, X1_inter, X1, F1, v_num);
+	
+	// Allocate device memory for input
+	float *d_X1_inter, *d_X1;
+	cudaMalloc(&d_X1_inter, v_num * F1 * sizeof(float));
+	cudaMalloc(&d_X1, v_num * F1 * sizeof(float));
+	// Copy input data to device
+	cudaMemcpy(d_X1_inter, X1_inter, v_num * F1 * sizeof(float), cudaMemcpyHostToDevice);
+	cudaMemset(d_X1, 0, v_num * F1 * sizeof(float));
+	// Launch kernel
+	cuda::launch_kernel_AX(d_csrA, d_X1_inter, d_X1, v_num, F1);
+	// Copy result back to host
+	cudaMemcpy(X1, d_X1, v_num * F1 * sizeof(float), cudaMemcpyDeviceToHost);
+	// Free device memory
+	cudaFree(d_X1_inter);
+	cudaFree(d_X1);
 	TimePoint AX1_end = chrono::steady_clock::now();
 	chrono::duration<double> AX1_ = AX1_end - AX1_start;
 	double AX1_time = AX1_.count() * 1e3;
 	printf("AX1_time: %.8lf\n", AX1_time);
+
+
 
 	// printf("Layer1 ReLU\n");
 	TimePoint ReLU_start = chrono::steady_clock::now();
@@ -258,6 +275,8 @@ int main(int argc, char **argv)
 	double ReLU_time = ReLU_.count() * 1e3;
 	printf("ReLU_time: %.8lf\n", ReLU_time);
 
+
+
 	// printf("Layer2 XW\n");	
 	TimePoint XW2_start = chrono::steady_clock::now();
 	XW(F1, F2, X1, X2_inter, W2);
@@ -265,6 +284,8 @@ int main(int argc, char **argv)
 	chrono::duration<double> XW2_ = XW2_end - XW2_start;
 	double XW2_time = XW2_.count() * 1e3;
 	printf("XW2_time: %.8lf\n", XW2_time);
+
+
 
 	// printf("Layer2 AX\n");
 	TimePoint AX2_start = chrono::steady_clock::now();
@@ -275,6 +296,8 @@ int main(int argc, char **argv)
 	double AX2_time = AX2_.count() * 1e3;
 	printf("AX2_time: %.8lf\n", AX2_time);
 
+
+
 	// printf("Layer2 LogSoftmax\n");
 	TimePoint LogSoftmax_start = chrono::steady_clock::now();
 	LogSoftmax(F2, X2);
@@ -282,6 +305,8 @@ int main(int argc, char **argv)
 	chrono::duration<double> LogSoftmax_ = LogSoftmax_end - LogSoftmax_start;
 	double LogSoftmax_time = LogSoftmax_.count() * 1e3;
 	printf("LogSoftmax_time: %.8lf\n", LogSoftmax_time);
+
+
 
 	// You need to compute the max row sum for result verification
 	TimePoint max_sum_start = chrono::steady_clock::now();
