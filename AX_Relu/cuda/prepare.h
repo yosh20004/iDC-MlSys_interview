@@ -73,16 +73,27 @@ inline std::vector<int> make_raw_graph(std::size_t v_num,          // raw graph 
     return raw_graph;
 }
 
+template<bool AllowNegative = true>
 inline f32 edgeNormalization(const int in_degree_dst, const int out_degree_src) {
     if (in_degree_dst == 0 || out_degree_src == 0)
         return 0.0f; 
-    return 1.0f / (std::sqrt(static_cast<f32>(in_degree_dst)) * 
-                   std::sqrt(static_cast<f32>(out_degree_src)));
+    
+    f32 norm = 1.0f / (std::sqrt(static_cast<f32>(in_degree_dst)) * 
+                       std::sqrt(static_cast<f32>(out_degree_src)));
+    
+    if constexpr (AllowNegative) {
+        static std::mt19937 rng(42);
+        static std::uniform_int_distribution<int> dist(0, 1);
+        return (dist(rng) == 0) ? norm : -norm;
+    } else {
+        return norm;
+    }
 }
 
 
+template<bool AllowNegative = false>
 inline cpu::CSRGraph_t RawGraph2CSR(const std::vector<int> &raw_graph,
-                               const std::size_t       v_num)      // raw graph 节点数
+                                    const std::size_t       v_num)      // raw graph 节点数
                   
 {
     assert(raw_graph.size() % 2 == 0);
@@ -118,7 +129,7 @@ inline cpu::CSRGraph_t RawGraph2CSR(const std::vector<int> &raw_graph,
         col_indices[index] = dst;
         row_indices[index] = src;
 
-        data[index] = edgeNormalization(in_degree[dst], out_degree[src]);
+        data[index] = edgeNormalization<AllowNegative>(in_degree[dst], out_degree[src]);
     }
 
     return cpu::CSRGraph_t{col_indices, row_indices, index_pointers, data};
@@ -129,17 +140,17 @@ template<typename T, bool random = false>
 T* alloc(int n) {
     T *p = (float *)aligned_alloc(64, n * sizeof(T));
     if constexpr (random)
-        for (int i = 0; i < n; ++i) p[i] = (T)(rand()) / static_cast<f32>(RAND_MAX);
+        for (int i = 0; i < n; ++i) p[i] = ((T)(rand()) / static_cast<f32>(RAND_MAX) - 0.5) * 2;
     return p;
 }
 
 
 namespace cpu {
-    inline void gemm_4_AX(const cpu::CSRGraph_t &A_csr, // raw_graph : (v_num * v_num)
-                          const f32*            X,      // X : (v_num * dim)
-                          f32*                  Y,      // Y : (v_num * dim)
-                          const uint            dim,
-                          const uint            v_num) 
+    inline void gemm_4_AX_Relu(const cpu::CSRGraph_t &A_csr, // raw_graph : (v_num * v_num)
+                               const f32*            X,      // X : (v_num * dim)
+                               f32*                  Y,      // Y : (v_num * dim)
+                               const uint            dim,
+                               const uint            v_num) 
     {   
         // #pragma omp parallel for
         for (uint i = 0; i < v_num; ++i) {
@@ -161,6 +172,11 @@ namespace cpu {
                 for (uint j = 0; j < dim; ++j) {
                     Y_row[j] += A_val * X_row[j];
                 }
+            }
+
+            #pragma omp simd
+            for (uint j = 0; j < dim; ++j) {
+                Y_row[j] = std::max(0.0f, Y_row[j]);
             }
         }
     }

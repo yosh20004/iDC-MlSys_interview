@@ -6,7 +6,7 @@ INC_DIR = -I. -I.. -I$(shell pwd) -I$(shell pwd)/.. -I/usr/local/cuda/include
 CXXFLAGS = -O3 -Wall -DUSE_BLAS -mfma -mavx2 -fopenmp -std=c++17 -IAX $(INC_DIR)
 NVCCFLAGS = -O3 -std=c++17 -ccbin $(CXX) -IAX $(INC_DIR)
 
-LDFLAGS = -L/usr/local/cuda/lib64 -lcusparse -lcudart -fopenmp
+LDFLAGS = -L/usr/local/cuda/lib64 -lcusparse -lcudart -lcublas -fopenmp
 
 TARGET = example.exe
 

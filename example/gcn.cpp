@@ -10,6 +10,7 @@
 #include "cpu/AX/cpu_gemm.h"
 
 #include "cuda/AX/gemm.cuh"
+#include "cuda/XW/gemm.h"
 
 using namespace std;
 typedef std::chrono::time_point<std::chrono::steady_clock> TimePoint;
@@ -26,6 +27,12 @@ CSRGraph_t csrGraph;
 cuda::CSRGraph_t d_csrA;
 
 float *X0, *W1, *W2, *X1, *X1_inter, *X2, *X2_inter;
+
+// 新增：全局设备指针
+float *d_X0 = nullptr;
+float *d_W1 = nullptr;
+float *d_X1_inter = nullptr;
+float *d_X1 = nullptr;
 
 void readGraph(char *fname)
 {
@@ -190,10 +197,17 @@ void freeFloats()
 
 void somePreprocessing()
 {
-	//The graph  will be transformed into adjacency list ,you can use other data structure such as CSR
-	// raw_graph_to_AdjacencyList();
-	csrGraph = RawGraph2CSR(raw_graph, v_num);
-	d_csrA = cuda::host2device(csrGraph);
+    csrGraph = RawGraph2CSR(raw_graph, v_num);    // host csr 
+    d_csrA   = cuda::host2device(csrGraph);  // device csr
+
+    cudaMalloc(&d_X0, v_num * F0 * sizeof(float));
+    cudaMalloc(&d_W1, F0 * F1 * sizeof(float));
+    cudaMemcpy(d_X0, X0, v_num * F0 * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_W1, W1, F0 * F1 * sizeof(float),  cudaMemcpyHostToDevice);
+
+    cudaMalloc(&d_X1_inter, v_num * F1 * sizeof(float));
+    cudaMalloc(&d_X1, v_num * F1 * sizeof(float));
+    cudaMemset(d_X1, 0, v_num * F1 * sizeof(float));
 }
 
 int main(int argc, char **argv)
@@ -215,11 +229,9 @@ int main(int argc, char **argv)
 
 	// Time point at the start of the computation
 	TimePoint start = chrono::steady_clock::now();
-
-	// Preprocessing time should be included
-
 	TimePoint prepross_start = chrono::steady_clock::now();
 	somePreprocessing();  // RawGrpah -> CSR
+						  // host -> device
 	TimePoint prepross_end = chrono::steady_clock::now();
 	chrono::duration<double> prepross_ = prepross_end - prepross_start;
 	double prepross_time = prepross_.count() * 1e3;
@@ -235,7 +247,11 @@ int main(int argc, char **argv)
 
 	// printf("Layer1 XW\n");
 	TimePoint XW1_start = chrono::steady_clock::now();
-	XW(F0, F1, X0, X1_inter, W1);
+	// XW(F0, F1, X0, X1_inter, W1);
+    cuda::launch_kernel_XW(v_num, F0, F1, d_X0, d_W1, d_X1_inter);
+    // The result d_X1_inter is kept on the device for the next AX operation.
+    cudaFree(d_X0);
+    cudaFree(d_W1);
 	TimePoint XW1_end = chrono::steady_clock::now();
 	chrono::duration<double> XW1_ = XW1_end - XW1_start;
 	double XW1_time = XW1_.count() * 1e3;
@@ -246,12 +262,7 @@ int main(int argc, char **argv)
 	// printf("Layer1 AX\n");
 	TimePoint AX1_start = chrono::steady_clock::now();
 	
-	// Allocate device memory for input
-	float *d_X1_inter, *d_X1;
-	cudaMalloc(&d_X1_inter, v_num * F1 * sizeof(float));
-	cudaMalloc(&d_X1, v_num * F1 * sizeof(float));
-	// Copy input data to device
-	cudaMemcpy(d_X1_inter, X1_inter, v_num * F1 * sizeof(float), cudaMemcpyHostToDevice);
+	// d_X1_inter is already on the device.
 	cudaMemset(d_X1, 0, v_num * F1 * sizeof(float));
 	// Launch kernel
 	cuda::launch_kernel_AX(d_csrA, d_X1_inter, d_X1, v_num, F1);
@@ -279,7 +290,18 @@ int main(int argc, char **argv)
 
 	// printf("Layer2 XW\n");	
 	TimePoint XW2_start = chrono::steady_clock::now();
-	XW(F1, F2, X1, X2_inter, W2);
+	// XW(F1, F2, X1, X2_inter, W2);
+	float *d_X1_xw, *d_W2_xw, *d_X2_inter_xw;
+    cudaMalloc(&d_X1_xw, v_num * F1 * sizeof(float));
+    cudaMalloc(&d_W2_xw, F1 * F2 * sizeof(float));
+    cudaMalloc(&d_X2_inter_xw, v_num * F2 * sizeof(float));
+    cudaMemcpy(d_X1_xw, X1, v_num * F1 * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_W2_xw, W2, F1 * F2 * sizeof(float), cudaMemcpyHostToDevice);
+    cuda::launch_kernel_XW(v_num, F1, F2, d_X1_xw, d_W2_xw, d_X2_inter_xw);
+    cudaMemcpy(X2_inter, d_X2_inter_xw, v_num * F2 * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaFree(d_X1_xw);
+    cudaFree(d_W2_xw);
+    cudaFree(d_X2_inter_xw);
 	TimePoint XW2_end = chrono::steady_clock::now();
 	chrono::duration<double> XW2_ = XW2_end - XW2_start;
 	double XW2_time = XW2_.count() * 1e3;
