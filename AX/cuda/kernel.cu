@@ -141,6 +141,8 @@ namespace cuda {
                                  const uint v_num,
                                  const uint dim)          // dim must be a multiple of 4 !!
     {
+        static_assert(COL_PER_BLOCK % 4 == 0, "COL_PER_BLOCK must be a multiple of 4");
+        
         const uint Y_row_index = blockIdx.x;
         const uint Y_col_index = blockIdx.y * COL_PER_BLOCK + threadIdx.x * 4;
         if (Y_col_index >= dim) 
@@ -150,7 +152,7 @@ namespace cuda {
         const uint end_index = d_csrA.index_pointers[Y_row_index + 1];
 
         float4 local_sum = {0.0f, 0.0f, 0.0f, 0.0f};
-        __shared__ float4 buffer[STRIDE][COL_PER_BLOCK / 4 + 1];
+        __shared__ float4 buffer[STRIDE][COL_PER_BLOCK / 4];
 
         for (uint i = start_index; 
              i < end_index; 
@@ -166,8 +168,8 @@ namespace cuda {
 
             const f32 A_ele = d_csrA.data[local_index];
             if (X_col_index + 3 < dim) {
-                float4 X_ele = 
-                    *reinterpret_cast<const float4*>(&X[X_row_index * dim + X_col_index]);
+                float4 X_ele
+                     = (float4&) X[X_row_index * dim + X_col_index];
                 local_sum.x += A_ele * X_ele.x;
                 local_sum.y += A_ele * X_ele.y;
                 local_sum.z += A_ele * X_ele.z;
@@ -222,7 +224,8 @@ namespace cuda {
                                    const f32* d_X,
                                    f32* d_Y,
                                    const uint v_num,
-                                   const uint dim)
+                                   const uint dim, 
+                                   RunMode mode)
     {
         const dim3 BlockSize = 512;
         const dim3 gridSize = dim3{ nnz,
@@ -230,7 +233,7 @@ namespace cuda {
                                    (dim + BlockSize.x - 1) / BlockSize.x};
         cudaMemset(d_Y, 0, v_num * dim * sizeof(float)); 
         std::printf("nnz = %d\n", nnz);
-        for (int i = 0; i < TIMES; ++i) {
+        for (int i = 0; i < GET_RUN_TIMES(mode); ++i) {
             cudaMemset(d_Y, 0, v_num * dim * sizeof(float)); 
             cuda::gemm_4_AX_v1<<<gridSize, BlockSize>>>(d_csrA, 
                                                        d_X,
@@ -250,14 +253,15 @@ namespace cuda {
                                    const f32* d_X,
                                    f32* d_Y,
                                    const uint v_num,
-                                   const uint dim)
+                                   const uint dim,
+                                   RunMode mode)
     {
         const dim3 BlockSize = 512;
         const dim3 gridSize = dim3{ nnz,
                                    1,
                                    (dim + BlockSize.x - 1) / BlockSize.x};
         cudaMemset(d_Y, 0, v_num * dim * sizeof(float)); 
-        for (int i = 0; i < TIMES; ++i) {
+        for (int i = 0; i < GET_RUN_TIMES(mode); ++i) {
             cudaMemset(d_Y, 0, v_num * dim * sizeof(float)); 
             cuda::gemm_4_AX_v2<<<gridSize, BlockSize>>>(d_csrA, 
                                                        d_X,
@@ -278,14 +282,15 @@ namespace cuda {
                                    const f32* d_X,
                                    f32* d_Y,
                                    const uint v_num,
-                                   const uint dim)
+                                   const uint dim,
+                                   RunMode mode)
     {
         const dim3 BlockSize = 16;
         const dim3 gridSize = dim3{v_num,
                                    dim, 
                                    1};
         cudaMemset(d_Y, 0, v_num * dim * sizeof(float)); 
-        for (int i = 0; i < 10; ++i) {
+        for (int i = 0; i < GET_RUN_TIMES(mode); ++i) {
             cudaMemset(d_Y, 0, v_num * dim * sizeof(float)); 
             cuda::gemm_4_AX_v3<<<gridSize, BlockSize>>>(d_csrA, 
                                                        d_X,
@@ -306,7 +311,8 @@ namespace cuda {
                                    const f32* d_X,
                                    f32* d_Y,
                                    const uint v_num,
-                                   const uint dim)
+                                   const uint dim,
+                                   RunMode mode)
     {
 
         constexpr uint COL_PER_BLOCK = 16 * 4;
@@ -317,7 +323,7 @@ namespace cuda {
                                    1};
 
         cudaMemset(d_Y, 0, v_num * dim * sizeof(float)); 
-        for (int i = 0; i < TIMES; ++i) {
+        for (int i = 0; i < GET_RUN_TIMES(mode); ++i) {
             cudaMemset(d_Y, 0, v_num * dim * sizeof(float)); 
             cuda::gemm_4_AX_v4<COL_PER_BLOCK, STRIDE> <<<gridSize, BlockSize>>>(d_csrA, 
                                                        d_X,
@@ -326,5 +332,73 @@ namespace cuda {
                                                        dim);
             cudaDeviceSynchronize();
         }
+    }
+}
+
+namespace cuda {
+    template<>
+    void launch_kernel<version::cuSPARSE>(CSRGraph_t d_csrA,
+                                   const uint nnz, 
+                                   const f32* d_X,
+                                   f32* d_Y,
+                                   const uint v_num,
+                                   const uint dim,
+                                   RunMode mode)
+    {
+        cusparseHandle_t handle;
+        cusparseSpMatDescr_t matA;
+        cusparseDnMatDescr_t matX, matY;
+        void* dBuffer = nullptr;
+        
+        auto init = [&]() {
+            cusparseCreate(&handle);
+            cusparseCreateCsr(&matA, v_num, v_num, nnz,
+                             d_csrA.index_pointers,
+                             d_csrA.col_indices,
+                             d_csrA.data,
+                             CUSPARSE_INDEX_32I, CUSPARSE_INDEX_32I,
+                             CUSPARSE_INDEX_BASE_ZERO, CUDA_R_32F);
+            cusparseCreateDnMat(&matX, v_num, dim, dim, (void*)d_X,
+                               CUDA_R_32F, CUSPARSE_ORDER_ROW);
+            cusparseCreateDnMat(&matY, v_num, dim, dim, (void*)d_Y,
+                               CUDA_R_32F, CUSPARSE_ORDER_ROW);
+            
+            size_t bufferSize = 0;
+            const float alpha = 1.0f;
+            const float beta = 0.0f;
+            cusparseSpMM_bufferSize(handle, 
+                                   CUSPARSE_OPERATION_NON_TRANSPOSE,
+                                   CUSPARSE_OPERATION_NON_TRANSPOSE,
+                                   &alpha, matA, matX, &beta, matY,
+                                   CUDA_R_32F, CUSPARSE_SPMM_ALG_DEFAULT,
+                                   &bufferSize);
+            cudaMalloc(&dBuffer, bufferSize);
+        };
+
+        auto cleanup = [&]() {
+            cudaFree(dBuffer);
+            cusparseDestroySpMat(matA);
+            cusparseDestroyDnMat(matX);
+            cusparseDestroyDnMat(matY);
+            cusparseDestroy(handle);
+        };
+        
+        init();
+        cudaMemset(d_Y, 0, v_num * dim * sizeof(float));
+
+        const float alpha = 1.0f;
+        const float beta = 0.0f;
+        
+        for (int i = 0; i < GET_RUN_TIMES(mode); ++i) {
+            cusparseSpMM(handle,
+                        CUSPARSE_OPERATION_NON_TRANSPOSE,
+                        CUSPARSE_OPERATION_NON_TRANSPOSE,
+                        &alpha, matA, matX, &beta, matY,
+                        CUDA_R_32F, CUSPARSE_SPMM_ALG_DEFAULT,
+                        dBuffer);
+        }
+        cudaDeviceSynchronize();
+        
+        cleanup();
     }
 }
