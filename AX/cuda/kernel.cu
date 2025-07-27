@@ -490,6 +490,7 @@ namespace cuda {
                                    const uint dim,
                                    RunMode mode)
     {
+        printf("BENCHMARKING Version : BaseLine\n");
         cusparseHandle_t handle;
         cusparseSpMatDescr_t matA;
         cusparseDnMatDescr_t matX, matY;

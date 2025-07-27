@@ -40,7 +40,7 @@ int main() {
                                d_data};
     
     TimePoint t1 = std::chrono::steady_clock::now();
-    cuda::launch_kernel<cuda::version::v5>(d_csrA, nnz, d_X, d_Y, v_num, dim, cuda::RunMode::Bench);
+    cuda::launch_kernel<cuda::version::cuSPARSE>(d_csrA, nnz, d_X, d_Y, v_num, dim, cuda::RunMode::Bench);
     TimePoint t2 = std::chrono::steady_clock::now();
 
     cudaError_t err_msg = cudaGetLastError();
