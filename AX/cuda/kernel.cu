@@ -152,7 +152,7 @@ namespace cuda {
         const uint end_index = d_csrA.index_pointers[Y_row_index + 1];
 
         float4 local_sum = {0.0f, 0.0f, 0.0f, 0.0f};
-        __shared__ float4 buffer[STRIDE][COL_PER_BLOCK / 4];
+        __shared__ float4 buffer[STRIDE][COL_PER_BLOCK / 4 + 1];
 
         for (uint i = start_index; 
              i < end_index; 
@@ -184,8 +184,8 @@ namespace cuda {
                 if (X_col_index + 2 < dim) 
                     local_sum.z += A_ele * X[X_row_index * dim + X_col_index + 2];
             }
-
         }
+        
         __syncthreads();
         (float4& )buffer[threadIdx.y][threadIdx.x] = local_sum;
         __syncthreads();
