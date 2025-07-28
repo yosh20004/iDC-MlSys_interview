@@ -145,6 +145,7 @@ void LogSoftmax(int dim, float *X)
 {
 	auto tmp_X = reinterpret_cast<float (*)[dim]>(X);
 
+#pragma omp parallel for
 	for (int i = 0; i < v_num; i++)
 	{
 		float max = tmp_X[i][0];
@@ -173,6 +174,7 @@ float MaxRowSum(float *X, int dim)
 	auto tmp_X = reinterpret_cast<float (*)[dim]>(X);
 	float max = -__FLT_MAX__;
 
+#pragma omp parallel for reduction(max:max)
 	for (int i = 0; i < v_num; i++)
 	{
 		float sum = 0;
