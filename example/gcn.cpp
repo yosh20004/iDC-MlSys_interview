@@ -33,6 +33,8 @@ float *d_X0 = nullptr;
 float *d_W1 = nullptr;
 float *d_X1_inter = nullptr;
 float *d_X1 = nullptr;
+float *d_W2 = nullptr;
+float *d_X2_inter = nullptr;
 
 void readGraph(char *fname)
 {
@@ -189,7 +191,6 @@ void freeFloats()
 	free(X0);
 	free(W1);
 	free(W2);
-	free(X1);
 	free(X2);
 	free(X1_inter);
 	free(X2_inter);
@@ -202,12 +203,32 @@ void somePreprocessing()
 
     cudaMalloc(&d_X0, v_num * F0 * sizeof(float));
     cudaMalloc(&d_W1, F0 * F1 * sizeof(float));
+    cudaMalloc(&d_W2, F1 * F2 * sizeof(float));
+
     cudaMemcpy(d_X0, X0, v_num * F0 * sizeof(float), cudaMemcpyHostToDevice);
     cudaMemcpy(d_W1, W1, F0 * F1 * sizeof(float),  cudaMemcpyHostToDevice);
+    cudaMemcpy(d_W2, W2, F1 * F2 * sizeof(float), cudaMemcpyHostToDevice);
 
     cudaMalloc(&d_X1_inter, v_num * F1 * sizeof(float));
     cudaMalloc(&d_X1, v_num * F1 * sizeof(float));
     cudaMemset(d_X1, 0, v_num * F1 * sizeof(float));
+
+    cudaMalloc(&d_X2_inter, v_num * F2 * sizeof(float));
+
+    // Add a synchronization point to warm up the GPU and ensure all initialization is complete
+    cudaDeviceSynchronize();
+}
+
+void freeDeviceMemory() {
+    cudaFree(d_X0);
+    cudaFree(d_W1);
+    cudaFree(d_W2);
+    cudaFree(d_X1_inter);
+    cudaFree(d_X1);
+    cudaFree(d_X2_inter);
+	cudaFree(d_csrA.index_pointers);
+	cudaFree(d_csrA.col_indices);
+	cudaFree(d_csrA.data);
 }
 
 int main(int argc, char **argv)
@@ -222,7 +243,6 @@ int main(int argc, char **argv)
 	readFloat(argv[6], W1, F0 * F1);
 	readFloat(argv[7], W2, F1 * F2);
 
-	initFloat(X1, v_num * F1);
 	initFloat(X1_inter, v_num * F1);
 	initFloat(X2, v_num * F2);
 	initFloat(X2_inter, v_num * F2);
@@ -250,8 +270,6 @@ int main(int argc, char **argv)
 	// XW(F0, F1, X0, X1_inter, W1);
     cuda::launch_kernel_XW(v_num, F0, F1, d_X0, d_W1, d_X1_inter);
     // The result d_X1_inter is kept on the device for the next AX operation.
-    cudaFree(d_X0);
-    cudaFree(d_W1);
 	TimePoint XW1_end = chrono::steady_clock::now();
 	chrono::duration<double> XW1_ = XW1_end - XW1_start;
 	double XW1_time = XW1_.count() * 1e3;
@@ -260,48 +278,22 @@ int main(int argc, char **argv)
 	
 
 	// printf("Layer1 AX\n");
-	TimePoint AX1_start = chrono::steady_clock::now();
-	
-	// d_X1_inter is already on the device.
-	cudaMemset(d_X1, 0, v_num * F1 * sizeof(float));
+	TimePoint Fused_AX1_Relu_start = chrono::steady_clock::now();
 	// Launch kernel
-	cuda::launch_kernel_AX(d_csrA, d_X1_inter, d_X1, v_num, F1);
-	// Copy result back to host
-	cudaMemcpy(X1, d_X1, v_num * F1 * sizeof(float), cudaMemcpyDeviceToHost);
+	cuda::launch_kernel_AX_Relu(d_csrA, d_X1_inter, d_X1, v_num, F1);
 	// Free device memory
-	cudaFree(d_X1_inter);
-	cudaFree(d_X1);
-	TimePoint AX1_end = chrono::steady_clock::now();
-	chrono::duration<double> AX1_ = AX1_end - AX1_start;
-	double AX1_time = AX1_.count() * 1e3;
-	printf("AX1_time: %.8lf\n", AX1_time);
+	TimePoint Fused_AX1_Relu_end = chrono::steady_clock::now();
+	chrono::duration<double> AX1_Relu = Fused_AX1_Relu_end - Fused_AX1_Relu_start;
+	double AX1_Relu_time = AX1_Relu.count() * 1e3;
 
-
-
-	// printf("Layer1 ReLU\n");
-	TimePoint ReLU_start = chrono::steady_clock::now();
-	ReLU(F1, X1);
-	TimePoint ReLU_end = chrono::steady_clock::now();
-	chrono::duration<double> ReLU_ = ReLU_end - ReLU_start;
-	double ReLU_time = ReLU_.count() * 1e3;
-	printf("ReLU_time: %.8lf\n", ReLU_time);
+	printf("Fused AX1 + ReLU_time: %.8lf\n", AX1_Relu_time);
 
 
 
 	// printf("Layer2 XW\n");	
 	TimePoint XW2_start = chrono::steady_clock::now();
 	// XW(F1, F2, X1, X2_inter, W2);
-	float *d_X1_xw, *d_W2_xw, *d_X2_inter_xw;
-    cudaMalloc(&d_X1_xw, v_num * F1 * sizeof(float));
-    cudaMalloc(&d_W2_xw, F1 * F2 * sizeof(float));
-    cudaMalloc(&d_X2_inter_xw, v_num * F2 * sizeof(float));
-    cudaMemcpy(d_X1_xw, X1, v_num * F1 * sizeof(float), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_W2_xw, W2, F1 * F2 * sizeof(float), cudaMemcpyHostToDevice);
-    cuda::launch_kernel_XW(v_num, F1, F2, d_X1_xw, d_W2_xw, d_X2_inter_xw);
-    cudaMemcpy(X2_inter, d_X2_inter_xw, v_num * F2 * sizeof(float), cudaMemcpyDeviceToHost);
-    cudaFree(d_X1_xw);
-    cudaFree(d_W2_xw);
-    cudaFree(d_X2_inter_xw);
+    cuda::launch_kernel_XW(v_num, F1, F2, d_X1, d_W2, d_X2_inter);
 	TimePoint XW2_end = chrono::steady_clock::now();
 	chrono::duration<double> XW2_ = XW2_end - XW2_start;
 	double XW2_time = XW2_.count() * 1e3;
@@ -311,8 +303,10 @@ int main(int argc, char **argv)
 
 	// printf("Layer2 AX\n");
 	TimePoint AX2_start = chrono::steady_clock::now();
-	// AX(F2, X2_inter, X2);
-	cpu::gemm_4_AX(csrGraph, X2_inter, X2, F2, v_num);
+    cuda::launch_kernel_AX(d_csrA, d_X2_inter, d_X1, v_num, F2); // 复用d_X1作为输出缓冲区
+	// 将结果拷贝回主机端X2
+    cudaMemcpy(X2, d_X1, v_num * F2 * sizeof(float), cudaMemcpyDeviceToHost);
+    // 释放设备内存
 	TimePoint AX2_end = chrono::steady_clock::now();
 	chrono::duration<double> AX2_ = AX2_end - AX2_start;
 	double AX2_time = AX2_.count() * 1e3;
@@ -349,5 +343,6 @@ int main(int argc, char **argv)
 	printf("total time: %.8lf\n\n", l_timeMs);
 
 	// Remember to free your allocated memory
+	freeDeviceMemory();
 	freeFloats();
 }
