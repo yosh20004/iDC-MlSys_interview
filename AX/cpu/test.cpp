@@ -40,35 +40,35 @@ void AX_test(const CSRGraph &A_csr, // raw_graph : (v_num * v_num)
 
 int main() {
     auto raw_graph = make_raw_graph(v_num);
-    const auto X = alloc<f32, true>(v_num * v_num);
+    const auto X = alloc<f32, true>(v_num * dim);
     auto A_csr = RawGraph2CSR(raw_graph, v_num);
-    auto Y_mkl = alloc<f32>(v_num * v_num);
-    auto Y_self = alloc<f32>(v_num * v_num);
+    auto Y_mkl = alloc<f32>(v_num * dim);
+    auto Y_self = alloc<f32>(v_num * dim);
 
     auto warmup = [&A_csr, &X, &Y_mkl, &Y_self]() -> void
     {
         // 预热
         for (int i=0; i < 100; ++i) {
-            gemm_IntelMKL(A_csr, X, Y_mkl, v_num);
-            AX_test(A_csr, X, Y_self, v_num);
+            gemm_IntelMKL(A_csr, X, Y_mkl, v_num, dim);
+            AX_test(A_csr, X, Y_self, v_num, dim);
         }
     };
 
     warmup();
     auto t1 = std::chrono::high_resolution_clock::now();
     for (int i=0; i < TIMES; ++i) {
-        gemm_IntelMKL(A_csr, X, Y_mkl, v_num);
+        gemm_IntelMKL(A_csr, X, Y_mkl, v_num, dim);
     }
     auto t2 = std::chrono::high_resolution_clock::now();
     warmup();
     auto t3 = std::chrono::high_resolution_clock::now();
     for (int i=0; i < TIMES; ++i) {
-        AX_test(A_csr, X, Y_self, v_num);
+        AX_test(A_csr, X, Y_self, v_num, dim);
     }
     auto t4 = std::chrono::high_resolution_clock::now();
 
     double err = 0;
-    for (uint i = 0; i < v_num * v_num; ++i)
+    for (uint i = 0; i < v_num * dim; ++i)
         err = err > std::abs(Y_mkl[i] - Y_self[i]) ? 
               err : std::abs(Y_mkl[i] - Y_self[i]);
 

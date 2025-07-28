@@ -64,7 +64,7 @@ namespace cpu {
                         const uint      v_num) 
     {   
         // A行主序遍历
-        #pragma omp parallel for
+        // #pragma omp parallel for
         for (uint i = 0; i < v_num; ++i) {
             const uint start = A_csr.index_pointers[i];
             const uint end = A_csr.index_pointers[i + 1];

@@ -9,6 +9,7 @@
 #include "mkl_spblas.h"
 
 inline uint v_num = 1024; // 图节点数
+inline uint dim = 1024; 
 using f32 = float;
 
 struct CSRGraph {
@@ -122,7 +123,8 @@ T* alloc(int n) {
 inline void gemm_IntelMKL(const CSRGraph &A_csr,
                           const float *X,
                           float *Y,
-                          MKL_INT v_num)
+                          MKL_INT v_num,
+                          MKL_INT dim)
 {
     // 1. 构造 MKL 稀疏矩阵描述符
     sparse_matrix_t A_mkl = nullptr;
@@ -152,11 +154,11 @@ inline void gemm_IntelMKL(const CSRGraph &A_csr,
         descrA,
         SPARSE_LAYOUT_ROW_MAJOR,            // 稠密矩阵按行主序
         X,
-        v_num,                            // 稠密矩阵的列数
-        v_num,                            // 稠密矩阵的 ldX (leading dimension)
+        dim,                            // 稠密矩阵的列数 (现在是dim)
+        dim,                            // 稠密矩阵的 ldX (leading dimension)
         beta,
         Y,
-        v_num                             // ldY
+        dim                             // ldY
     );
 
     // 4. 释放资源
